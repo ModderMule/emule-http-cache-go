@@ -1,0 +1,15 @@
+{{ define "body" }}
+<p>Encrypted chunk cache for eMuleQt. This server stores AES-256-CBC ciphertext
+and never receives a key, a file hash or a part number.</p>
+<table>
+  <tr><td><code>GET</code></td><td><a href="{{ .BaseURL }}/v1/info">{{ .BaseURL }}/v1/info</a></td></tr>
+  <tr><td><code>POST</code></td><td><code>{{ .BaseURL }}/v1/chunks</code></td></tr>
+  <tr><td><code>GET</code></td><td><code>{{ .BaseURL }}/v1/chunks/{id}</code></td></tr>
+  <tr><td><code>DELETE</code></td><td><code>{{ .BaseURL }}/v1/chunks/{id}</code> &mdash; auth required</td></tr>
+</table>
+{{ if .OpenUpload }}
+<p>Uploads are open: no API key is needed to store a chunk here.</p>
+{{ end }}
+<p>Interactive API documentation: <a href="{{ .BaseURL }}/swagger/index.html">{{ .BaseURL }}/swagger/index.html</a></p>
+<p>See <code>README.md</code> for the full contract.</p>
+{{ end }}

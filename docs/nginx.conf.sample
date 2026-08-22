@@ -1,0 +1,107 @@
+########################################################################
+# eMule HTTP Cache — reverse proxy in front of the Go server
+#
+# The Go binary serves HTTP itself, so nginx is optional. Put one in
+# front when you want TLS on the browser-facing pages, virtual hosting,
+# or an existing vhost to carry the cache on a sub-path.
+#
+# Read docs/architecture.md before adding anything to this file: the
+# eMuleQt client caps a chunk response's headers at 2048 bytes in total
+# and drops the connection past that, and it has no chunked decoder.
+# A proxy that injects headers or re-frames the body will break fetches
+# in ways that look like a dead server.
+########################################################################
+
+server {
+    listen 80;
+    server_name cache.example.com;
+
+    # A padded eMule part is 9,728,016 bytes and nginx defaults to 1m,
+    # so without this every upload is a 413 before the server sees it.
+    client_max_body_size 12m;
+
+    location / {
+        # The trailing slash matters: it strips nothing here because the
+        # location is "/", but keep the pair consistent if you move the
+        # app under a sub-path.
+        proxy_pass http://127.0.0.1:8080;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+
+        # Stream the upload straight through instead of spooling all
+        # 9.28 MB to a temp file first: the server reads it in 1 MiB
+        # slices precisely so it never holds a whole chunk.
+        proxy_request_buffering off;
+
+        # Same on the way out, so a Range response starts moving at once
+        # rather than being buffered whole.
+        proxy_buffering off;
+
+        # A slow peer may take minutes over one chunk. The server rolls
+        # its own per-slice deadlines; nginx must not undercut them.
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+}
+
+# ---------------------------------------------------------------------
+# TLS, and why the chunk URL must stay http
+# ---------------------------------------------------------------------
+# eMuleQt downloads chunks over a hand-built socket with no TLS at all,
+# dialling port 80. An https chunk URL connects to 443 and speaks
+# cleartext at it, so every fetch fails while uploads keep working.
+#
+# Terminate TLS here if you like — the install page and /swagger are
+# ordinary browser traffic — but pin the http address peers should use:
+#
+#   server:
+#     public_base_url: "http://cache.example.com"
+#
+# The server refuses to *derive* an https base URL for this reason, and
+# warns at startup if you pin one.
+
+# ---------------------------------------------------------------------
+# Keeping chunk ids out of the access log
+# ---------------------------------------------------------------------
+# A chunk URL is a bearer token: the 128-bit id is the only thing
+# guarding that chunk's ciphertext, and the default "combined" format
+# writes it to access.log on every download. The Go server scrubs its
+# own log; nginx needs telling. In the http { } block:
+#
+#   map $request_uri $scrubbed_uri {
+#       "~^(?<endpoint>/v1/chunks/)[0-9a-f]{32}"   "${endpoint}<id>";
+#       default                                    $request_uri;
+#   }
+#
+#   log_format no_ids '$remote_addr - [$time_local] '
+#                     '"$request_method $scrubbed_uri $server_protocol" '
+#                     '$status $body_bytes_sent';
+#
+# and then, in the server block above:
+#
+#   access_log /var/log/nginx/emule-cache.log no_ids;
+
+# ---------------------------------------------------------------------
+# Deploying under a sub-path
+# ---------------------------------------------------------------------
+# Two ways, and only one needs the server configured.
+#
+# Let nginx strip the prefix — the trailing slash on proxy_pass is what
+# does it, and the server stays mounted at its root:
+#
+#   location /cache/ {
+#       proxy_pass http://127.0.0.1:8080/;
+#       ...
+#   }
+#   # and pin, so the URLs handed to peers carry the prefix:
+#   #   server:
+#   #     public_base_url: "http://cache.example.com/cache"
+#
+# Or have the server expect the prefix itself, for a proxy that cannot
+# strip one:
+#
+#   server:
+#     base_path: "/cache"

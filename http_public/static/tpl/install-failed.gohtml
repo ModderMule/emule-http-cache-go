@@ -1,0 +1,14 @@
+{{ define "body" }}
+<p class="box bad">Nothing was written: {{ .Message }}</p>
+{{ if .Hints }}
+<p>Run one of these on the server, then reload this page:</p>
+<pre><code>{{ range .Hints }}{{ . }}
+{{ end }}</code></pre>
+{{ end }}
+<h2>Or install it by hand</h2>
+<pre><code>cp config.example.yaml config.yaml</code></pre>
+<p>Then put a secret of your own in the <code>api_keys</code> block. A config you
+wrote yourself is never read back by this page.</p>
+<p class="muted">Once it works, tighten the permissions again &mdash; the server only needed
+to write here for this one request. <a href="{{ .BaseURL }}/install">Try again</a></p>
+{{ end }}

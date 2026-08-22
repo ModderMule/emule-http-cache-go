@@ -1,0 +1,39 @@
+{{ define "body" }}
+<p class="box warn"><strong>This is the only time the key is shown.</strong> Copy it now.
+If you lose it, it is still in the config file on the server; if you cannot read that
+file either, delete it and reload <a href="{{ .BaseURL }}/install">/install</a> for a new one.</p>
+{{ if not .ClaimRecorded }}
+<p class="box bad">The disclosure could not be recorded in <code>var/install.json</code>,
+so this page may show the key again. Check that the var directory is writable by the
+server's user.</p>
+{{ end }}
+<h2>Your API key</h2>
+<table>
+  <tr><td>key id</td><td><code>{{ .KeyID }}</code></td></tr>
+  <tr><td>secret</td><td><span class="key">{{ .Secret }}</span></td></tr>
+  <tr><td>base URL</td><td><code>{{ .BaseURL }}</code></td></tr>
+</table>
+{{ if .OpenUpload }}
+<p class="box warn"><strong>Anyone can upload to this server.</strong> No key is needed
+for <code>POST /v1/chunks</code>. Anonymous chunks are owned by <code>anonymous</code>,
+which nobody can authenticate as, so they cannot be deleted through the API and only
+lapse at their TTL. Watch the disk, and keep the anonymous daily limit honest.</p>
+{{ end }}
+<h2>Configure eMuleQt in one click</h2>
+<p><a {{ .Ed2kHref }}>{{ .Ed2kLinkText }}</a></p>
+<p class="muted">This link carries the secret. Treat it exactly like the key itself: it is
+for your own client, not for a forum post. See <code>docs/ed2k-httpcache-link.md</code>.</p>
+<h2>Or by hand</h2>
+<pre><code>httpCache:
+  enabled: true
+  baseUrl: "{{ .BaseURL }}"
+  apiKey: "{{ .Secret }}"</code></pre>
+<h2>Worth doing next</h2>
+<ul>
+  <li>Check <a href="{{ .BaseURL }}/v1/info">{{ .BaseURL }}/v1/info</a> answers.</li>
+  <li>Nothing else: expired chunks are reclaimed by the server itself, on the
+      <code>gc.interval</code> timer. Set it to <code>0</code> and run
+      <code>emule-http-cache gc</code> from cron if you would rather do it that way.</li>
+  <li>Keep the config file to its own user. It holds an upload credential.</li>
+</ul>
+{{ end }}

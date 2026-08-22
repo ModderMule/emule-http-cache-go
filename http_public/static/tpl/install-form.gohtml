@@ -1,0 +1,31 @@
+{{ define "body" }}
+<p>This server has no config file yet. Nothing has been written to disk &mdash;
+choose your settings and press the button, and the next page will show you the API key
+<strong>once</strong>.</p>
+{{ if .Errors }}
+<p class="box bad">Nothing has been written. Fix the fields marked below and submit again.</p>
+{{ end }}
+<form method="post" action="{{ .Action }}">
+{{ range .Fields }}
+{{ if eq .Kind "checkbox" }}
+  <div class="check">
+    <input type="checkbox" value="1" name="{{ .Name }}" id="{{ .Name }}"{{ if index $.Values .Name }} checked{{ end }}>
+    <label for="{{ .Name }}" style="margin:0"><span>{{ .Label }}</span><small>{{ .Hint }}</small></label>
+  </div>
+{{ else if eq .Kind "number" }}
+  <label><span>{{ .Label }}</span><small>{{ .Hint }}</small>
+    <input type="number" step="any" min="{{ .Min }}" name="{{ .Name }}" id="{{ .Name }}" value="{{ index $.Values .Name }}">
+    {{ with index $.Errors .Name }}<small class="err">{{ . }}</small>{{ end }}
+  </label>
+{{ else }}
+  <label><span>{{ .Label }}</span><small>{{ .Hint }}</small>
+    <input type="text" name="{{ .Name }}" id="{{ .Name }}" value="{{ index $.Values .Name }}"{{ if eq .Name "publicBaseUrl" }} placeholder="{{ $.DetectedBaseURL }}"{{ end }}>
+    {{ with index $.Errors .Name }}<small class="err">{{ . }}</small>{{ end }}
+  </label>
+{{ end }}
+{{ end }}
+<p><button type="submit">Write the config</button></p>
+</form>
+<p class="muted">Every one of these is a plain line in the config file afterwards,
+with a comment explaining it. Nothing here is a one-way door.</p>
+{{ end }}

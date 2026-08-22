@@ -1,0 +1,56 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/emule-http-cache
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.*
+
+# Go workspace files
+go.work
+go.work.sum
+
+# OS and IDE specific
+.idea/
+*.iml
+*.ipr
+*.iws
+.fleet/
+.vscode/
+*.DS_Store
+*.swp
+*.swo
+*~
+\#*\#
+
+# Logs, process IDs and other application files
+*.pid
+*.log
+
+# Build output
+/bin
+/build
+/dist
+
+# ---------------------------------------------------------------------------
+# The config holds an API upload credential — anyone with it can store chunks
+# under that key and delete anything it uploaded. Never commit one.
+# ---------------------------------------------------------------------------
+/config.yaml
+/config.local.yaml
+.env
+.env.*
+!.env.example
+
+# Runtime data: ciphertext blobs, their sidecars, quota counters, the install
+# marker. The directories are kept so a fresh checkout still has somewhere to
+# write; their contents are not ours to track.
+/data/storage/
+/data/var/

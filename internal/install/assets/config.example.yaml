@@ -1,0 +1,131 @@
+# ---------------------------------------------------------------------------
+# eMule HTTP Cache — configuration.
+#
+# Copy to config.yaml and edit, or open /install in a browser and let the
+# installer write it for you. The installer builds config.yaml out of *this*
+# file, so these comments end up in your real config.
+#
+# Every key can also be set from the environment: server.addr is SERVER_ADDR,
+# storage.max_chunk_size is STORAGE_MAX_CHUNK_SIZE, and so on.
+# ---------------------------------------------------------------------------
+
+server:
+  addr: ":8080"          # listen address
+  mode: release          # gin mode: debug | release | test
+
+  # Absolute base URL handed back in the "url" field of a 201, and the only URL
+  # peers ever fetch. Leave empty to derive it from each request; pin it when a
+  # reverse proxy rewrites Host, or peers get URLs pointing at the wrong place.
+  #
+  # Keep it http://. eMuleQt downloads chunks over a plain socket with no TLS,
+  # so an https URL here means every peer fails to fetch. Terminate TLS in front
+  # and pin the http address the proxy forwards to.
+  public_base_url: ""
+
+  # Mount every route under a prefix, for a reverse proxy that does not strip
+  # one. Empty mounts at the root, which is what "proxy_pass http://host:8080/"
+  # with its trailing slash gives you.
+  base_path: ""
+
+  # Load the HTML pages from disk instead of the copies compiled into the
+  # binary, so a template can be edited without a rebuild. Empty uses the
+  # embedded set.
+  static_file_path: ""
+
+  # Left at 0 on purpose. Both are absolute deadlines measured from the start of
+  # a request, so any value big enough for a 9.28 MB chunk on a slow link stops
+  # being a stall detector. The download and upload paths roll their own
+  # per-slice deadlines instead.
+  read_timeout: 0s
+  write_timeout: 0s
+
+  read_header_timeout: 10s
+  idle_timeout: 120s
+
+  # Must outlast an upload in flight: shutdown does not interrupt a running
+  # handler, and 9,728,016 bytes at a real 100 KB/s takes 97 seconds.
+  shutdown_timeout: 120s
+
+storage:
+  # Where ciphertext blobs and their metadata sidecars live, sharded 256 ways by
+  # the first two hex characters of the chunk id. The layout is identical to the
+  # PHP reference server's, so this can be pointed at an existing install.
+  data_dir: ./data/storage
+
+  # Quota counters and other small runtime state.
+  var_dir: ./data/var
+
+  # Largest single chunk the server accepts. An eMule part is 9,728,000 bytes of
+  # plaintext, which is 9,728,016 after AES-CBC PKCS#7 padding; 10 MiB leaves
+  # room without inviting arbitrary blobs.
+  max_chunk_size: 10485760
+
+  # Refuse uploads once free disk space would drop below this. 0 = no floor.
+  # Complements a key's daily quota: that limits one key for one day, this
+  # protects the host from every key at once. Set both.
+  min_free_bytes: 1073741824   # 1 GiB
+
+  # Applied when the client sends no X-Chunk-TTL, and the ceiling any requested
+  # TTL is clamped to.
+  default_ttl: 48h
+  max_ttl: 168h
+
+  # Flush a chunk to the platter before it is renamed into place. Costly on
+  # macOS, where this is a full drive-cache flush. Safe to turn off on a cache
+  # whose contents are disposable and TTL-bounded anyway.
+  fsync: true
+
+gc:
+  # How often expired chunks are reclaimed. Reads never delete — a GET must not
+  # do write work — so this is what frees the disk. 0 disables the in-process
+  # sweeper and leaves "emule-http-cache gc" on cron as the only reclaim path.
+  interval: 1h
+
+  # Chunks deleted per sweep, so one sweep can never run long.
+  max_deletes: 200
+
+upload:
+  # Accept uploads with no API key at all. Anonymous uploads are owned by the
+  # reserved key id "anonymous", which nobody can authenticate as — so they
+  # cannot be deleted through the API and only ever lapse at their TTL. A
+  # *wrong* key is still a 401; only an absent one falls through.
+  open_upload: false
+
+  # Daily allowance for anonymous uploads, in bytes, when open_upload is on.
+  # 0 = unlimited, which on an open server means "please fill my disk".
+  open_upload_quota_bytes_per_day: 10737418240   # 10 GiB
+
+# ---------------------------------------------------------------------------
+# API keys — uploaders only. Downloads are unauthenticated by design.
+#
+# Generate one with:   emule-http-cache init
+#
+# The id labels the chunk's owner and its counter in var/quota-<id>-<date>.txt,
+# so keep it to [A-Za-z0-9._-]. "anonymous" is reserved and is ignored on load.
+# ---------------------------------------------------------------------------
+api_keys:
+  local-test:
+    secret: "dev-only-change-me-0123456789abcdef"
+
+    # 0 = unlimited. Counted per UTC day, per key.
+    quota_bytes_per_day: 0
+
+    # false revokes this uploader without deleting the entry, so you can put it
+    # back later and still know whose it was. A revoked key loses DELETE too —
+    # it stops being a credential entirely.
+    enabled: true
+
+log:
+  level: info            # debug | info | warn | error | fatal
+  json: false            # JSON encoder (machine-parseable) vs. console encoder
+  color: true            # colorize console level names (ignored when json: true)
+  enable_file: false     # also write to a rotating log file
+  file_location: log.log # rotating file path (100MB/file, gzip, 28-day retention)
+  enable_buffer: false   # keep recent lines in memory
+  buffer_lines: 10000    # max lines retained in the in-memory buffer
+  filter_prefixes: []    # forwarded-log line prefixes to drop, e.g. ["HTTP:"]
+
+  # One line per request. Chunk ids are replaced with <id> before anything is
+  # written: a chunk URL is a bearer token, and the id is the only thing
+  # guarding that chunk's ciphertext.
+  access_log: true

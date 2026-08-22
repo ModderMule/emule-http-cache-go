@@ -1,0 +1,14 @@
+{{ define "body" }}
+<p>This server is configured. The key for <code>{{ .KeyID }}</code> was shown once, on
+{{ .ShownAt }} UTC, and is not shown again.</p>
+{{ if .OpenUpload }}
+<p class="box warn">This server accepts uploads without a key.</p>
+{{ end }}
+<h2>If you need the key</h2>
+<p>It is in <code>{{ .ConfigPath }}</code> on the server. Read it over SSH.</p>
+<h2>If you want a new one</h2>
+<p>Delete that file and reload <a href="{{ .BaseURL }}/install">{{ .BaseURL }}/install</a>.
+Chunks already stored keep working &mdash; they are downloaded without authentication &mdash;
+but nothing uploaded under the old key can be deleted through the API any more.</p>
+<p class="muted"><a href="{{ .BaseURL }}/">Server status</a></p>
+{{ end }}
