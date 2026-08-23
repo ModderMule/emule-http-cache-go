@@ -105,7 +105,12 @@ func BundleDirectory(params *BundleRequestParams) (*BundleResponse, error) {
 	}
 
 	// don't include our archive files
-	tarFileRelative := strings.TrimPrefix(tarFileName, baseDir)
+	//
+	// Compared in slash form on both sides: tarFileName comes from --out, which
+	// is written with forward slashes, while Walk yields the host separator. On
+	// Windows the two could never match, so the temp .tar was only kept out of
+	// its own archive by bundle.sh also passing --exclude=dist.
+	tarFileRelative := strings.TrimPrefix(filepath.ToSlash(tarFileName), baseDir)
 	if len(tarFileRelative) != 0 && tarFileRelative[:1] == "/" { // "path" in Walk starts without leading slash
 		tarFileRelative = tarFileRelative[1:]
 	}
@@ -126,7 +131,7 @@ func BundleDirectory(params *BundleRequestParams) (*BundleResponse, error) {
 		}
 
 		// skip the file we are writing right now
-		if path == tarFileRelative {
+		if filepath.ToSlash(path) == tarFileRelative {
 			return nil
 		}
 
@@ -237,7 +242,14 @@ func addFileToTarByPath(tw *tar.Writer, path string, baseDir string, info os.Fil
 	if err != nil {
 		return errors.Wrap(err, "can not read file header for tar")
 	}
-	header.Name = filepath.Join(baseDir, strings.TrimPrefix(path, baseDir))
+	// ToSlash, because tar names are always slash-separated whatever the host
+	// separator is -- an archive written on Windows has to extract to the same
+	// tree everywhere. Without it filepath.Join yields "docs\x.md" there, which
+	// is not a path in the archive at all: it is one root-level file with a
+	// backslash in its name. The v0.1.2 win64 release shipped exactly that.
+	// On Unix ToSlash is a no-op, which is correct -- a backslash is a legal
+	// character in a Unix filename and must be left alone.
+	header.Name = filepath.ToSlash(filepath.Join(baseDir, strings.TrimPrefix(path, baseDir)))
 	if err := tw.WriteHeader(header); err != nil {
 		return errors.Wrap(err, "can not write tar header")
 	}
@@ -268,7 +280,9 @@ func addFileToTar(tw *tar.Writer, file *os.File, pathPrefix string) error {
 	if err != nil {
 		return errors.Wrap(err, "can not read file header for tar")
 	}
-	header.Name = filepath.Join(pathPrefix, filepath.Base(file.Name()))
+	// Slash-separated for the same reason as in addFileToTarByPath. Latent while
+	// every caller passes an empty pathPrefix, but it is the same mistake.
+	header.Name = filepath.ToSlash(filepath.Join(pathPrefix, filepath.Base(file.Name())))
 	if err := tw.WriteHeader(header); err != nil {
 		return errors.Wrap(err, "can not write tar header")
 	}

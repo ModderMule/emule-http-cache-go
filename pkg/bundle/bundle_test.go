@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -95,6 +96,100 @@ func TestBundleDirectoryContents(t *testing.T) {
 	}
 }
 
+// TestBundleDirectoryWritesSlashSeparatedNames is the regression test for the
+// v0.1.2 win64 release, whose archive stored "docs\architecture.md" and
+// "http_public\static\tpl\page.gohtml" instead of paths. Tar names are always
+// slash-separated whatever the host separator is, so an archive built on Windows
+// extracts to the same tree as one built anywhere else; without that, tar on
+// macOS and Linux produces flat files with backslashes in their names rather
+// than a directory tree at all.
+//
+// Like TestBundleDirectoryLeavesNoTempTar, this cannot fail on a Unix host
+// either before or after the fix -- filepath.Join already emits "/" here. It is
+// a gate for the Windows runner. What is checkable on any host is whether the
+// gate works at all, which is what TestBadTarNamesCatchesWindowsSeparators
+// covers; the final proof is the published win64 manifest.
+func TestBundleDirectoryWritesSlashSeparatedNames(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "test-bundle.tar.gz")
+
+	binary := filepath.Join(t.TempDir(), "emule-http-cache")
+	if err := os.WriteFile(binary, []byte("not really a binary"), 0o755); err != nil {
+		t.Fatalf("write binary: %v", err)
+	}
+	newSourceTree(t)
+
+	params := &BundleRequestParams{
+		Directory:       "./",
+		Output:          out,
+		ExcludeDotfiles: true,
+		Files:           []string{binary},
+	}
+	t.Logf("input: dir=./ out=%s add=%v (host separator %q)", out, params.Files, string(filepath.Separator))
+
+	if _, err := BundleDirectory(params); err != nil {
+		t.Fatalf("BundleDirectory: %v", err)
+	}
+
+	got := manifest(t, out)
+	t.Logf("output: archive contains %v", got)
+
+	if bad := badTarNames(got); len(bad) != 0 {
+		t.Errorf("archive holds malformed tar names %v (full manifest %v)", bad, got)
+	}
+
+	// The nested entry is the one that carries a separator at all, so a manifest
+	// without it would pass the check above while proving nothing.
+	if !contains(got, "scripts/update.sh") {
+		t.Errorf("expected a nested entry \"scripts/update.sh\" to exercise the separator, got %v", got)
+	}
+}
+
+// TestBadTarNamesCatchesWindowsSeparators checks the guard the test above leans
+// on. That test cannot fail on this host, so its value rests entirely on
+// badTarNames actually rejecting a Windows-shaped name and on manifest handing
+// over the stored names unaltered -- both of which are host-independent, and
+// both of which have already been wrong here once.
+func TestBadTarNamesCatchesWindowsSeparators(t *testing.T) {
+	cases := []struct {
+		name    string
+		wantBad bool
+	}{
+		{"README.md", false},
+		{"scripts/update.sh", false},
+		{"http_public/static/tpl/page.gohtml", false},
+		{`docs\architecture.md`, true},               // what v0.1.2 win64 shipped
+		{`http_public\static\tpl\page.gohtml`, true}, // and its nested form
+		{"/etc/passwd", true},                        // absolute
+		{"../outside.txt", true},                     // escapes the extract dir
+		{"docs/../../outside.txt", true},             // and the embedded form
+		{`C:\dist\emule-http-cache.exe`, true},       // drive-qualified
+	}
+	for _, tc := range cases {
+		bad := len(badTarNames([]string{tc.name})) != 0
+		t.Logf("input %-40q -> bad=%v (want %v)", tc.name, bad, tc.wantBad)
+		if bad != tc.wantBad {
+			t.Errorf("badTarNames(%q) reported bad=%v, want %v", tc.name, bad, tc.wantBad)
+		}
+	}
+
+	// And prove manifest reports what is stored rather than normalising it: this
+	// archive is built by hand precisely because BundleDirectory cannot produce a
+	// backslash name on this host.
+	archive := filepath.Join(t.TempDir(), "handmade.tar.gz")
+	writeArchiveWithNames(t, archive, []string{"README.md", `docs\architecture.md`})
+
+	got := manifest(t, archive)
+	t.Logf("hand-built archive input: %v", []string{"README.md", `docs\architecture.md`})
+	t.Logf("manifest output: %v", got)
+
+	if !contains(got, `docs\architecture.md`) {
+		t.Errorf("manifest normalised the stored name away, got %v -- the Windows gate would not fire", got)
+	}
+	if bad := badTarNames(got); len(bad) != 1 {
+		t.Errorf("expected badTarNames to flag exactly the backslash entry, got %v", bad)
+	}
+}
+
 // TestBundleDirectoryOverwrites exercises the pre-existing-archive removal: a
 // release is often bundled twice in a row over the same output path.
 func TestBundleDirectoryOverwrites(t *testing.T) {
@@ -147,7 +242,14 @@ func newSourceTree(t *testing.T) string {
 	return dir
 }
 
-// manifest returns the sorted slash-separated paths held in a .tar.gz.
+// manifest returns the sorted entry names held in a .tar.gz, exactly as they are
+// stored.
+//
+// Deliberately no filepath.ToSlash on the way out. It used to normalise here,
+// which laundered away the one defect these tests most need to see: on a Windows
+// runner an archive holding "scripts\update.sh" would have satisfied
+// TestBundleDirectoryContents' check for "scripts/update.sh". Raw names mean
+// that test doubles as a separator gate.
 func manifest(t *testing.T, archive string) []string {
 	t.Helper()
 
@@ -176,7 +278,7 @@ func manifest(t *testing.T, archive string) []string {
 		if header.Typeflag == tar.TypeDir {
 			continue
 		}
-		names = append(names, filepath.ToSlash(header.Name))
+		names = append(names, header.Name)
 	}
 	sort.Strings(names)
 	return names
@@ -195,6 +297,67 @@ func listDir(t *testing.T, dir string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// badTarNames returns the entries that are not well-formed tar names. A tar name
+// is slash-separated and relative to the archive root, so a backslash, a leading
+// slash, a drive letter or a ".." segment all mean the archive will not extract
+// to the tree it was meant to describe.
+//
+// Note this works on raw strings rather than path/filepath: the point is to
+// catch names carrying the *other* host's separator, and filepath on Unix
+// happily treats a backslash as an ordinary character.
+func badTarNames(names []string) []string {
+	var bad []string
+	for _, name := range names {
+		switch {
+		case strings.Contains(name, `\`):
+		case strings.HasPrefix(name, "/"):
+		case len(name) > 1 && name[1] == ':':
+		case name == ".." || strings.HasPrefix(name, "../") || strings.Contains(name, "/../") || strings.HasSuffix(name, "/.."):
+		default:
+			continue
+		}
+		bad = append(bad, name)
+	}
+	return bad
+}
+
+// writeArchiveWithNames builds a .tar.gz whose entries carry exactly the given
+// names. BundleDirectory cannot emit a backslash name on a Unix host, so a
+// hand-built archive is the only way to check that the tests would notice one.
+func writeArchiveWithNames(t *testing.T, archive string, names []string) {
+	t.Helper()
+
+	f, err := os.Create(archive)
+	if err != nil {
+		t.Fatalf("create archive: %v", err)
+	}
+	defer f.Close()
+
+	zw := gzip.NewWriter(f)
+	tw := tar.NewWriter(zw)
+	for _, name := range names {
+		body := []byte("body of " + name)
+		header := &tar.Header{
+			Name:     name,
+			Mode:     0o644,
+			Size:     int64(len(body)),
+			Typeflag: tar.TypeReg,
+		}
+		if err := tw.WriteHeader(header); err != nil {
+			t.Fatalf("write header %s: %v", name, err)
+		}
+		if _, err := tw.Write(body); err != nil {
+			t.Fatalf("write body %s: %v", name, err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar writer: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close gzip writer: %v", err)
+	}
 }
 
 func contains(haystack []string, needle string) bool {
