@@ -63,18 +63,21 @@ echo "attaches its bundle to a DRAFT release for ${NEW}."
 echo
 echo "Finish with: write the notes on the draft, then publish it."
 
-# --- optional: follow the builds --------------------------------------------
-# No `gh workflow run` here: the tag push above already started all three, and
-# dispatching would build every release twice. `|| true` throughout, since
-# set -e is in effect and the tag is already pushed by this point -- a gh
-# hiccup must not report an otherwise-successful release as failed.
-if command -v gh >/dev/null 2>&1; then
-  read -r -p "Watch the builds now? [y/N]: " WATCH
-  WATCH="$(printf '%s' "$WATCH" | tr '[:upper:]' '[:lower:]')"
-  if [ "$WATCH" = "y" ]; then
-    gh run list --limit 3 || true
-    gh run watch || true
-  else
-    echo "Follow them with: gh run list --limit 3"
-  fi
-fi
+# --- where to watch ---------------------------------------------------------
+# Deliberately no `gh` here. gh authenticates with its own keyring account,
+# which is not necessarily the account origin pushes as -- on this machine it is
+# not -- so it would query the API under the wrong identity, and cannot see a
+# draft release at all without push access on the repo. `gh run watch` with no
+# run id is interactive too, which would hang an otherwise finished release.
+#
+# There is also no `gh workflow run`: the tag push above already started all
+# three workflows, and dispatching would build every release twice.
+#
+# The sed strips any credentials embedded in the remote URL before printing it.
+# origin may carry a token, and it must not be echoed to the terminal.
+REPO_URL="$(git remote get-url "${REMOTE}" \
+  | sed -E 's#^https://[^@/]*@#https://#; s#^git@github\.com:#https://github.com/#; s#\.git$##')"
+
+echo
+echo "Actions:  ${REPO_URL}/actions"
+echo "Releases: ${REPO_URL}/releases"

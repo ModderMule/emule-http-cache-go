@@ -74,10 +74,6 @@ and dispatching would build every release twice.
 Each ships a `.sha256` beside its archive. There is no combined `SHA256SUMS`:
 three independent workflows cannot append to one file without racing.
 
-The three share a repo-scoped concurrency group, `release-<tag>`, with
-`cancel-in-progress: false`. That makes them queue rather than race to create
-the same draft release — the first creates it, the other two attach to it.
-
 Windows gets a `.tar.gz` like the others rather than a `.zip`, because the
 `bundle` subcommand only emits tar.gz. Windows 10 1803+ ships `bsdtar`, so
 `tar xzf` works there out of the box.
@@ -87,6 +83,57 @@ still uploads a downloadable artifact, it just has no release to attach it to.
 
 CI uses the built-in `GITHUB_TOKEN` with `permissions: contents: write`. No
 personal access token is needed or wanted.
+
+### Why there is no concurrency group
+
+The three workflows deliberately do **not** share a `concurrency` group. An
+earlier version gave all three `group: release-<tag>` with
+`cancel-in-progress: false`, on the assumption that they would queue behind each
+other. They do not: GitHub holds at most **one pending run per group**, so when
+the third arrival showed up it displaced the queued second one, which was
+cancelled with
+
+```
+Canceling since a higher priority waiting request for release-v0.1.1 exists
+```
+
+and that release shipped only two of its three platforms.
+
+The group was there to stop the three racing to create the same draft. Without
+it they can, so it is worth knowing the shape of that race.
+`softprops/action-gh-release` with `draft: true` lists every release looking for
+the tag — a draft is not returned by the get-release-by-tag endpoint — so the
+normal path is still "first creates it, the other two attach". The gap is the
+second or so between a draft being created and it becoming visible in that list:
+
+```
+👩‍🏭 Creating new GitHub release for tag v0.1.1...
+Release 375124546 is not yet discoverable by tag v0.1.1, retrying... (2 retries remaining)
+```
+
+Two jobs entering that window together would both create, and GitHub permits
+duplicate drafts for one tag because a draft's tag does not exist yet. In
+practice they are minutes apart — `linux.yml` runs the tests first — so this is
+about a one-second window in a several-minute build, but it is not zero.
+
+**If you ever see two drafts for the same tag**, that is this race. Move the
+assets onto whichever draft you intend to publish, delete the other, and publish.
+
+## The scripts never call `gh`
+
+`publish-release.sh` prints the Actions and Releases URLs and stops there. It
+does not shell out to `gh`, on purpose: `gh` authenticates with its own keyring
+account, which is not necessarily the account `origin` pushes as. Where they
+differ, `gh` queries the API as the wrong user — and since draft releases are
+only visible with push access, it will cheerfully report that the release you
+just built does not exist. `gh run watch` with no run id is interactive on top of
+that, which would hang a release that had already been pushed.
+
+Watch the builds in the browser, or run `gh` yourself once you have checked
+`gh auth status` against the account that owns the repo.
+
+The URLs are derived from `git remote get-url` with any embedded credentials
+stripped, so a remote carrying a token does not echo it to the terminal.
 
 ## What is in an archive
 
@@ -109,8 +156,10 @@ scripts/update.sh
 
 `update.sh` is the only script that ships, since it is the only one a deployed
 copy has any use for. `pkg/bundle` excludes by base name and has no "everything
-but" form, so the others are named explicitly in `bundle.sh` — **a newly added
-script must be added to that list or it will go out with the next release.**
+but" form, so `bundle.sh` walks `scripts/*.sh` and excludes everything except
+`update.sh`. That list used to be written out by hand and it rotted immediately —
+`bump-version.sh` and `publish-release.sh` shipped inside the v0.1.1 archives.
+Generating it means a new script is excluded the moment it is added.
 
 ## Building without releasing
 
@@ -130,6 +179,22 @@ GOOS=linux GOARCH=arm64 ./scripts/build.sh
 syscall dependency is `golang.org/x/sys/unix`. `-trimpath -s -w` keeps the
 binary small without disturbing `debug.ReadBuildInfo()`, so the `vcs.revision`
 fallback in `commit()` still works.
+
+## When a release goes wrong
+
+A tag build that fails part way leaves a tag, possibly a half-populated draft,
+and a `release:` commit behind. There is no partial-retry: fix the cause, then
+cut the next patch version. Re-using the tag means clearing all three.
+
+```sh
+# on GitHub: delete the draft release
+git push origin :refs/tags/v1.3.0     # remove the remote tag
+git tag -d v1.3.0                     # and the local one
+```
+
+`bump-version.sh` will not bump a version to itself, so if `cmd/version.go`
+already reads `v1.3.0` you either move to `v1.3.1` or reset the release commit
+before trying again.
 
 ## Checking a release
 

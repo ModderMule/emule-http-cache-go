@@ -60,13 +60,19 @@ mkdir -p "$(dirname "$OUT")"
 # scripts/update.sh so a deployed copy can pull the next release over itself.
 # config.yaml is never included — it holds an upload credential.
 #
-# Only update.sh ships from scripts/; the rest are build-time helpers with no
-# business in a deploy. pkg/bundle excludes by base name and has no "everything
-# but" form, so a newly added script must be named here or it goes out too.
+# Only update.sh ships from scripts/; the rest are build-time and release-time
+# helpers with no business in a deploy. pkg/bundle excludes by base name and has
+# no "everything but" form, so the exclusions are generated from what is
+# actually in scripts/ rather than hand-listed -- a hand-written list silently
+# rots, and did: bump-version.sh and publish-release.sh shipped in v0.1.1.
 DIRS="--exclude=.git --exclude=bin --exclude=dist --exclude=data --exclude=testdata"
 EXT="--ext=.go"
 FILES="--files=go.mod --files=go.sum --files=config.yaml"
-FILES="$FILES --files=build.sh --files=bundle.sh --files=swagger.sh --files=test.sh"
+for script in scripts/*.sh; do
+  name="$(basename "$script")"
+  [ "$name" = "update.sh" ] && continue
+  FILES="$FILES --files=$name"
+done
 ADD="--add=bin/$BIN_NAME"
 go run . bundle "--out=$OUT" $DIRS $EXT $FILES $ADD
 

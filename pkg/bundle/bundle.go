@@ -183,18 +183,32 @@ func BundleDirectory(params *BundleRequestParams) (*BundleResponse, error) {
 	}
 
 	for _, fileName := range params.Files {
-		file, err := os.Open(fileName)
+		addFile, err := os.Open(fileName)
 		if err != nil {
 			return nil, errors.Wrap(err, "error opening file to add to tar")
 		}
-		defer file.Close()
-		if err := addFileToTar(tw, file, ""); err != nil {
+		// Closed at the end of each iteration rather than deferred: a defer
+		// inside a loop holds every handle open until the whole function
+		// returns. Named addFile so it cannot be mistaken for the tar file
+		// above, which it used to shadow.
+		err = addFileToTar(tw, addFile, "")
+		addFile.Close()
+		if err != nil {
 			return nil, err
 		}
 	}
 
 	if err := tw.Close(); err != nil {
 		return nil, errors.Wrap(err, "error closing tar file")
+	}
+	// Close the tar file itself, not just the writer wrapped around it, before
+	// gzipping and removing it below. The deferred Close above does not fire
+	// until this function returns, and Windows refuses to remove a file that
+	// still has an open handle -- unlike Unix, where unlinking an open file is
+	// fine. The deferred call stays for the early-return paths; closing twice
+	// just yields os.ErrClosed, which a bare deferred call discards.
+	if err := file.Close(); err != nil {
+		return nil, errors.Wrap(err, "error closing tar file handle")
 	}
 
 	// gzip compress the tar file
