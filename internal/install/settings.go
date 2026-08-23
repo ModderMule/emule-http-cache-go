@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ModderMule/emule-http-cache-go/internal/baseurl"
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
+	"github.com/ModderMule/emule-http-cache-go/pkg/baseurl"
 )
 
 const (

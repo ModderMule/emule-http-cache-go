@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ModderMule/emule-http-cache-go/internal/storage"
+	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 	"github.com/gin-gonic/gin"
 )
 

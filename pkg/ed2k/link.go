@@ -18,7 +18,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ModderMule/emule-http-cache-go/internal/baseurl"
+	"github.com/ModderMule/emule-http-cache-go/pkg/baseurl"
 )
 
 // Type is the link's type token, matched case-insensitively.

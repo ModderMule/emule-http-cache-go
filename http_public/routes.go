@@ -6,7 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ModderMule/emule-http-cache-go/internal/security"
-	"github.com/ModderMule/emule-http-cache-go/internal/storage"
+	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 )
 
 // handleDownload serves a stored chunk.

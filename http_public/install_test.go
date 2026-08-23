@@ -10,13 +10,12 @@ import (
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
-	"github.com/ModderMule/emule-http-cache-go/internal/ed2k"
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
-	"github.com/ModderMule/emule-http-cache-go/internal/storage"
 	"github.com/ModderMule/emule-http-cache-go/log"
+	"github.com/ModderMule/emule-http-cache-go/pkg/ed2k"
+	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 )
 
 var (
@@ -29,7 +28,7 @@ var (
 func newInstallServer(t *testing.T) *httptest.Server {
 	t.Helper()
 
-	dir := t.TempDir()
+	cfg, dir := testConfig(t)
 
 	sample, err := os.ReadFile(filepath.Join("..", "config.example.yaml"))
 	if err != nil {
@@ -38,14 +37,6 @@ func newInstallServer(t *testing.T) *httptest.Server {
 	if err := os.WriteFile(filepath.Join(dir, "config.example.yaml"), sample, 0o644); err != nil {
 		t.Fatalf("staging the sample: %v", err)
 	}
-
-	cfg := &config.Config{}
-	cfg.Server.Mode = "test"
-	cfg.Storage.DataDir = filepath.Join(dir, "storage")
-	cfg.Storage.VarDir = filepath.Join(dir, "var")
-	cfg.Storage.MaxChunkSize = 10 << 20
-	cfg.Storage.DefaultTTL = 48 * time.Hour
-	cfg.Storage.MaxTTL = 168 * time.Hour
 
 	store := storage.NewStore(cfg)
 	quota := storage.NewQuota(cfg)

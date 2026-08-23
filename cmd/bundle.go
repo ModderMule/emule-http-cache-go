@@ -12,7 +12,7 @@ var bundleParams = &bundle.BundleRequestParams{}
 
 func init() {
 	createBundleCmd.Flags().StringVar(&bundleParams.Directory, "dir", "./", "The root directory with all the files to include in the bundle.")
-	createBundleCmd.Flags().StringVar(&bundleParams.Output, "out", "./bin/emule-http-cache.tar.gz", "The name of the bundle to be created.")
+	createBundleCmd.Flags().StringVar(&bundleParams.Output, "out", "./dist/emule-http-cache.tar.gz", "The name of the bundle to be created.")
 
 	createBundleCmd.Flags().StringArrayVar(&bundleParams.ExcludeDirs, "exclude", nil, "A list of directory names to be excluded.")
 	createBundleCmd.Flags().StringArrayVar(&bundleParams.ExcludeFiles, "files", nil, "A list of file names to be excluded.")

@@ -1,0 +1,76 @@
+name: Linux CI
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# The release step attaches assets to a draft release, which needs write access
+# to contents. The built-in GITHUB_TOKEN covers it; no PAT is involved.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    # Shared with macos.yml and windows.yml. Concurrency groups are repo-scoped,
+    # so the three tag builds queue behind each other rather than racing to
+    # create the same draft release: the first creates it, the rest attach to it.
+    concurrency:
+      group: release-${{ github.ref_name }}
+      cancel-in-progress: false
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Linux only, so the suite runs once per release rather than three times.
+      # -short skips the two suites that move a 9.28 MB part; see docs/testing.md.
+      - name: Run tests
+        run: go test ./... -short
+
+      - name: Get version
+        shell: bash
+        run: |
+          APP_VERSION=$(sed -n 's/^[[:space:]]*Version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' cmd/version.go | head -1)
+          test -n "$APP_VERSION" || { echo "could not extract Version from cmd/version.go" >&2; exit 1; }
+          echo "APP_VERSION=$APP_VERSION" >> "$GITHUB_ENV"
+
+      - name: Build and bundle
+        shell: bash
+        env:
+          CGO_ENABLED: "0"
+        run: ./scripts/bundle.sh linux
+
+      - name: Checksum
+        shell: bash
+        run: |
+          cd dist
+          sha256sum "emule-http-cache-${APP_VERSION}-linux-amd64.tar.gz" \
+            > "emule-http-cache-${APP_VERSION}-linux-amd64.tar.gz.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: emule-http-cache-${{ env.APP_VERSION }}-linux-amd64
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+      # Only on a tag: a workflow_dispatch run on a branch still produces the
+      # artifact above, but has no release to attach it to.
+      - name: Attach to draft release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: true
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256

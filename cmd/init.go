@@ -7,8 +7,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
-	"github.com/ModderMule/emule-http-cache-go/internal/ed2k"
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
+	"github.com/ModderMule/emule-http-cache-go/pkg/ed2k"
 )
 
 // initFlags mirrors the browser install form, so the two paths cannot drift.

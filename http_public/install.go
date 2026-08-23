@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/ModderMule/emule-http-cache-go/internal/ed2k"
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
+	"github.com/ModderMule/emule-http-cache-go/pkg/ed2k"
 )
 
 // installFormData renders the settings form.
@@ -40,7 +40,7 @@ type installedData struct {
 	// reads as a single malformed field and is refused outright.
 	//
 	// Handing over the finished attribute skips normalisation. The value is
-	// built by internal/ed2k, which percent-encodes every field, and the
+	// built by pkg/ed2k, which percent-encodes every field, and the
 	// remaining HTML metacharacters are escaped below.
 	Ed2kHref     template.HTMLAttr
 	Ed2kLinkText string

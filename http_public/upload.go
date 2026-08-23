@@ -10,7 +10,7 @@ import (
 
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
 	"github.com/ModderMule/emule-http-cache-go/internal/security"
-	"github.com/ModderMule/emule-http-cache-go/internal/storage"
+	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 )
 
 // storageFullRetryAfter is what a 507 suggests waiting.

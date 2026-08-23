@@ -21,6 +21,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -30,8 +31,8 @@ import (
 
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
-	"github.com/ModderMule/emule-http-cache-go/internal/storage"
 	"github.com/ModderMule/emule-http-cache-go/log"
+	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 
 	// Registers the generated OpenAPI spec served at /swagger.
 	_ "github.com/ModderMule/emule-http-cache-go/docs_api"
@@ -117,6 +118,13 @@ func New(d Deps) (*Server, error) {
 		quota:     d.Quota,
 		installed: d.Installed,
 	})
+
+	// Say which pages came off disk: an operator who mistyped the directory
+	// gets the embedded set silently, and this line is how they notice.
+	if len(pages.overridden) > 0 {
+		s.logger.Infof("page templates from %s: %s", d.Config.Server.StaticFilePath,
+			strings.Join(pages.overridden, ", "))
+	}
 
 	return s, nil
 }

@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
-	"github.com/ModderMule/emule-http-cache-go/internal/storage"
+	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 )
 
 func init() {

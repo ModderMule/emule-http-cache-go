@@ -7,14 +7,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Version and Commit are stamped at build time:
+// Version is the release version, and the single source of truth for it. The
+// literal below is what scripts/bump-version.sh rewrites, what the three build
+// workflows scrape with sed to name their archives, and what a `go install`
+// build reports with no build flags at all. Keeping one literal rather than
+// deriving it from `git describe` means the tag, the artifact filename and the
+// version the binary reports cannot drift apart.
 //
-//	go build -ldflags "-X github.com/ModderMule/emule-http-cache-go/cmd.Version=1.0.0"
+// Both are still stamped at build time, so a build from a working tree can say
+// which commit it came from:
 //
-// Left as placeholders otherwise, with the module's own build info as a
-// fallback so a `go install` build still says something useful.
+//	go build -ldflags "-X github.com/ModderMule/emule-http-cache-go/cmd.Version=v1.0.0"
+//
+// Commit is left empty, with the module's own build info as a fallback so a
+// `go install` build still says something useful.
 var (
-	Version = "dev"
+	Version = "v0.1.0"
 	Commit  = ""
 )
 

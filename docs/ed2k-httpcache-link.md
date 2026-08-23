@@ -161,8 +161,8 @@ understanding the link at all.
 
 ## Reference implementation and test vectors
 
-`internal/ed2k/link.go` in this repository builds and parses these links, and
-`internal/ed2k/link_test.go` round-trips the vectors below and refuses the ones further down — the
+`pkg/ed2k/link.go` in this repository builds and parses these links, and
+`pkg/ed2k/link_test.go` round-trips the vectors below and refuses the ones further down — the
 tables in that file are lifted from this page, so the document *is* the test. It is a reference, not
 a dependency: the format is small enough to implement from this page alone.
 

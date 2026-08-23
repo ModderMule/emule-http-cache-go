@@ -5,22 +5,34 @@ How this server is put together, and why the parts that look odd are that way.
 ## The shape of the thing
 
 ```
-main.go            three lines of body, plus the swagger general-info block
-cmd/               cobra commands: serve, init, gc, conformance, bundle, version
-log/               zap + lumberjack behind a small Logger interface
-internal/config    viper loading, defaulting and validation
-internal/storage   the filesystem blob store, quota accounting and the expiry sweep
-internal/security  API-key authentication
-internal/ed2k      the ed2k://|httpcache| configuration link
-internal/baseurl   one definition of "a cache base URL"
-internal/install   writes config.yaml and the install marker
+main.go               three lines of body, plus the swagger general-info block
+cmd/                  cobra commands: serve, init, gc, conformance, bundle, version
+log/                  zap + lumberjack behind a small Logger interface
+internal/config       viper loading, defaulting and validation
+internal/security     API-key authentication
+internal/install      writes config.yaml and the install marker
 internal/conformance  the portable contract test
-http_public/       the gin server, its handlers and its HTML pages
-docs_api/          the generated OpenAPI spec
+pkg/storage           the filesystem blob store, quota accounting and the expiry sweep
+pkg/ed2k              the ed2k://|httpcache| configuration link
+pkg/baseurl           one definition of "a cache base URL"
+pkg/bundle            the deployable tar.gz builder
+http_public/          the gin server, its handlers and its HTML pages
+docs_api/             the generated OpenAPI spec
 ```
 
 Dependency direction is one way: `config` is the leaf everything else imports,
-`http_public` sits on top, and nothing in `internal/` imports `cmd/`.
+`http_public` sits on top, and nothing below `cmd/` imports it.
+
+`pkg/` holds what a third-party Go program could reasonably want on its own:
+`ed2k` and `baseurl` are pure and have no dependency outside the standard
+library, and `bundle` is self-contained. `storage` is the exception and only
+half-portable — its `NewStore`, `NewQuota` and `NewGc` constructors take a
+`*config.Config`, which lives under `internal/` and so cannot be named from
+outside this module. Everything else on `Store` is reachable, but an external
+caller cannot build one. Closing that gap means giving `storage` a small
+options struct of its own (it reads nine config fields) and letting `cmd/`
+translate; until then, treat `pkg/storage` as public in layout and internal in
+practice.
 
 ## Why the client constrains the server so tightly
 

@@ -55,9 +55,47 @@ the client's own 2048-byte accounting.
 `TestNoRedirectOnChunkPath` pins gin's two redirect defaults off, since a 3xx on
 that path is a fatal fetch error for the real client.
 
+## The download handler
+
+The contract test proves a chunk round-trips; it says almost nothing about the
+headers wrapped around it. `http_public/download_test.go` covers what
+`serveChunk` emits:
+
+- the six headers set before the Range branch — `Content-Type`, `Accept-Ranges`,
+  `ETag`, `Cache-Control`, `X-Chunk-Expires`, `X-Content-Type-Options` —
+  asserted on the 200, 206 **and** 416 paths alike, since a 416 is still a
+  response about a real chunk and must carry the same validator;
+- the ETag compared against a digest computed from the payload the test itself
+  supplied, so it proves the header is derived from the bytes rather than merely
+  agreeing with the sidecar;
+- `Content-Range: bytes */<size>` on every unsatisfiable range, which is how a
+  client learns the real size after guessing wrong;
+- HEAD carrying a `Content-Length` with no body, plain and ranged;
+- the `If-None-Match` matrix, including the deliberate choice **not** to answer
+  304 to a Range request — a resuming downloader already knows the entity is
+  unchanged, it wants the bytes it is missing;
+- an expired chunk answering 404 without being deleted, since a GET must never
+  do write work;
+- a blob truncated under a live server never being served as a complete body.
+  That last one matters more than it looks: a silently short body decrypts to
+  garbage and is reported as `Corrupt`, and three of those retire a healthy
+  cache entry. A dropped connection is recoverable; a plausible truncation is
+  not.
+
+Two of these assertions cannot fail against any correct Go server, because
+`net/http` enforces them itself — it supplies `Content-Length: 0` when a handler
+writes no body, and it discards a body written under HEAD. They are kept because
+they pin the wire contract a non-Go implementation also has to meet; the
+`isHead` checks in `download.go` are there to avoid reading 9.7 MB off disk, not
+to keep the body off the wire.
+
+The PHP server has no counterpart to any of this. `tests/unit.php` runs only
+`StorageTest` and `InstallTest`, so its `ByteRange` and `RangeResponse` have no
+unit coverage at all — only the live-server `SmokeTest`.
+
 ## Storage compatibility
 
-`internal/storage.TestSidecarIsByteIdenticalToPHP` decodes a sidecar written by
+`pkg/storage.TestSidecarIsByteIdenticalToPHP` decodes a sidecar written by
 the PHP server, re-encodes it, and asserts byte equality. That is the cheapest
 possible proof that a Go server writing into a store a PHP server also reads
 stays readable by it — the JSON field order in `ChunkMeta` is a wire format, not

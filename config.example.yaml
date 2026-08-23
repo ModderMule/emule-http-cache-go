@@ -27,9 +27,10 @@ server:
   # with its trailing slash gives you.
   base_path: ""
 
-  # Load the HTML pages from disk instead of the copies compiled into the
-  # binary, so a template can be edited without a rebuild. Empty uses the
-  # embedded set.
+  # Override the HTML pages from disk, so a template can be edited without a
+  # rebuild. The directory holds a tpl/ subdirectory, and only the pages you
+  # want to change: anything absent there comes from the copy compiled into the
+  # binary. Empty uses the embedded set for every page.
   static_file_path: ""
 
   # Left at 0 on purpose. Both are absolute deadlines measured from the start of

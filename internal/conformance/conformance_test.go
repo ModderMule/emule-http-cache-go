@@ -11,8 +11,8 @@ import (
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
 	"github.com/ModderMule/emule-http-cache-go/internal/conformance"
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
-	"github.com/ModderMule/emule-http-cache-go/internal/storage"
 	"github.com/ModderMule/emule-http-cache-go/log"
+	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 )
 
 var (

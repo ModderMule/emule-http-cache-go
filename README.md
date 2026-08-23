@@ -14,7 +14,29 @@ implementation, and it passes in both directions against the PHP original.
 
 ---
 
+## Install
+
+Grab the archive for your platform from the [latest release][releases], unpack
+it, and you have everything you need beside the binary:
+
+```sh
+tar xzf emule-http-cache-<version>-linux-amd64.tar.gz
+./emule-http-cache init          # writes config.yaml, prints the key once
+./emule-http-cache serve
+```
+
+Builds are published for `linux-amd64`, `macos-arm64` and `win64`. Each carries a
+`.sha256` next to it:
+
+```sh
+shasum -a 256 -c emule-http-cache-<version>-linux-amd64.tar.gz.sha256
+```
+
+[releases]: https://github.com/ModderMule/emule-http-cache-go/releases
+
 ## Quick start
+
+Building it yourself instead:
 
 ```sh
 ./scripts/build.sh
@@ -30,8 +52,8 @@ Interactive API docs are at `/swagger/index.html`.
 
 ## Requirements
 
-Go 1.25+ to build. Nothing at runtime: one static binary, and a directory it can
-write to.
+Go 1.26+ to build (see `go.mod`). Nothing at runtime: one static binary, and a
+directory it can write to.
 
 ---
 
@@ -254,6 +276,7 @@ Every setting also takes an environment override: `server.addr` is `SERVER_ADDR`
 
 - [`docs/architecture.md`](docs/architecture.md) — how it fits together, and why the client constrains it so tightly
 - [`docs/testing.md`](docs/testing.md) — the conformance suite and the raw-wire tests
+- [`docs/releasing.md`](docs/releasing.md) — cutting a release, and what the build workflows publish
 - [`docs/migration-from-php.md`](docs/migration-from-php.md) — moving an existing install across
 - [`docs/ed2k-httpcache-link.md`](docs/ed2k-httpcache-link.md) — the one-click configuration link format
 - [`docs/nginx.conf.sample`](docs/nginx.conf.sample) — putting a reverse proxy in front

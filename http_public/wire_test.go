@@ -2,21 +2,13 @@ package http_public
 
 import (
 	"bufio"
-	"bytes"
-	"crypto/rand"
 	"fmt"
 	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/ModderMule/emule-http-cache-go/internal/config"
-	"github.com/ModderMule/emule-http-cache-go/internal/storage"
-	"github.com/ModderMule/emule-http-cache-go/log"
 )
 
 // The client's own limits, from src/core/net/HttpClientReqSocket.h. Exceeding
@@ -26,50 +18,6 @@ const (
 	clientMaxHeaderLine  = 1024
 	clientMaxHeaderTotal = 2048
 )
-
-// cipherSize is the ciphertext of one full eMule part.
-const cipherSize = 9_728_016
-
-// newTestServer starts a real listener with one chunk stored, and returns the
-// server plus that chunk's id.
-func newTestServer(t *testing.T, size int) (*httptest.Server, string) {
-	t.Helper()
-
-	dir := t.TempDir()
-	cfg := &config.Config{}
-	cfg.Server.Mode = "test"
-	cfg.Storage.DataDir = filepath.Join(dir, "storage")
-	cfg.Storage.VarDir = filepath.Join(dir, "var")
-	cfg.Storage.MaxChunkSize = 10 * 1024 * 1024
-	cfg.Storage.DefaultTTL = 48 * time.Hour
-	cfg.Storage.MaxTTL = 168 * time.Hour
-
-	store := storage.NewStore(cfg)
-	quota := storage.NewQuota(cfg)
-
-	payload := make([]byte, size)
-	if _, err := rand.Read(payload); err != nil {
-		t.Fatalf("generating a payload: %v", err)
-	}
-
-	meta, err := store.Ingest(bytes.NewReader(payload), "test", time.Hour, int64(size))
-	if err != nil {
-		t.Fatalf("storing a chunk: %v", err)
-	}
-
-	srv, err := New(Deps{
-		Config: cfg, Store: store, Quota: quota,
-		GC: storage.NewGc(cfg, store, quota), Logger: log.NewNop(), Installed: true,
-	})
-	if err != nil {
-		t.Fatalf("building the server: %v", err)
-	}
-
-	ts := httptest.NewServer(srv.Handler())
-	t.Cleanup(ts.Close)
-
-	return ts, meta.ID
-}
 
 // TestRawWireResponse is the assertion an httptest round trip structurally
 // cannot make.
@@ -81,9 +29,10 @@ func newTestServer(t *testing.T, size int) (*httptest.Server, string) {
 // lines straight into SHA-256 and AES-CBC. This dials the socket itself and
 // reads the bytes on the wire.
 func TestRawWireResponse(t *testing.T) {
-	ts, id := newTestServer(t, cipherSize)
+	srv := newChunkServer(t, cipherSize, time.Hour)
+	id := srv.meta.ID
 
-	target, err := url.Parse(ts.URL)
+	target, err := url.Parse(srv.URL)
 	if err != nil {
 		t.Fatalf("parsing the test server URL: %v", err)
 	}
@@ -185,9 +134,10 @@ func TestRawWireResponse(t *testing.T) {
 // would answer a near-miss path with a 301, and the client treats any 3xx on
 // this path as a failed fetch with no retry.
 func TestNoRedirectOnChunkPath(t *testing.T) {
-	ts, id := newTestServer(t, 4096)
+	srv := newChunkServer(t, 4096, time.Hour)
+	id := srv.meta.ID
 
-	client := ts.Client()
+	client := srv.Client()
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 
 	for _, path := range []string{
@@ -197,7 +147,7 @@ func TestNoRedirectOnChunkPath(t *testing.T) {
 	} {
 		t.Logf("input:  GET %s", path)
 
-		resp, err := client.Get(ts.URL + path)
+		resp, err := client.Get(srv.URL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
 		}
