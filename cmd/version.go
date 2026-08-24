@@ -22,7 +22,7 @@ import (
 // Commit is left empty, with the module's own build info as a fallback so a
 // `go install` build still says something useful.
 var (
-	Version = "v0.1.2"
+	Version = "v0.1.3"
 	Commit  = ""
 )
 
