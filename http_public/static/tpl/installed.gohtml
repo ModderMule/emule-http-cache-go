@@ -19,10 +19,67 @@ for <code>POST /v1/chunks</code>. Anonymous chunks are owned by <code>anonymous<
 which nobody can authenticate as, so they cannot be deleted through the API and only
 lapse at their TTL. Watch the disk, and keep the anonymous daily limit honest.</p>
 {{ end }}
-<h2>Configure eMuleQt in one click</h2>
-<p><a {{ .Ed2kHref }}>{{ .Ed2kLinkText }}</a></p>
+<h2>Configure eMuleQt</h2>
+<p><button type="button" class="copy" id="copyLink">Copy the link</button>
+<span class="muted" id="copyNote" hidden></span></p>
+<p><code id="ed2kLink">{{ .Ed2kLinkText }}</code></p>
+<p>eMuleQt watches the clipboard for these links, so copying one is the whole setup: it
+handshakes with this server and asks before it stores anything. If nothing happens, check
+Options &rarr; &ldquo;Watch clipboard for eD2K links&rdquo;, which is on by default.</p>
 <p class="muted">This link carries the secret. Treat it exactly like the key itself: it is
 for your own client, not for a forum post. See <code>docs/ed2k-httpcache-link.md</code>.</p>
+<script>
+(() => {
+  const button = document.getElementById('copyLink');
+  const source = document.getElementById('ed2kLink');
+  const note = document.getElementById('copyNote');
+
+  const report = (ok) => {
+    note.textContent = ok
+      ? 'copied — switch to eMuleQt'
+      : 'could not copy; select the link and copy it by hand';
+    note.hidden = false;
+  };
+
+  // navigator.clipboard needs a secure context and this server is often plain
+  // http on a LAN, where it is simply absent. execCommand still works there.
+  const copyByHand = (text) => {
+    const scratch = document.createElement('textarea');
+    scratch.value = text;
+    scratch.setAttribute('readonly', '');
+    scratch.style.position = 'fixed';
+    scratch.style.opacity = '0';
+    document.body.appendChild(scratch);
+    scratch.select();
+
+    try {
+      return document.execCommand('copy');
+    } catch {
+      return false;
+    } finally {
+      document.body.removeChild(scratch);
+    }
+  };
+
+  button.addEventListener('click', async () => {
+    // The link is read out of the DOM rather than templated in here, so the
+    // secret never has to survive a second round of escaping.
+    const text = source.textContent;
+
+    if (window.isSecureContext && navigator.clipboard) {
+      try {
+        await navigator.clipboard.writeText(text);
+        report(true);
+        return;
+      } catch {
+        // Refused, or no permission for it. The textarea below still works.
+      }
+    }
+
+    report(copyByHand(text));
+  });
+})();
+</script>
 <h2>Or by hand</h2>
 <pre><code>httpCache:
   enabled: true

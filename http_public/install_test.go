@@ -19,7 +19,7 @@ import (
 )
 
 var (
-	hrefPattern   = regexp.MustCompile(`href="(ed2k://[^"]*)"`)
+	copyPattern   = regexp.MustCompile(`<code id="ed2kLink">([^<]*)</code>`)
 	secretPattern = regexp.MustCompile(`<span class="key">([0-9a-f]{48})</span>`)
 )
 
@@ -95,34 +95,49 @@ func submitInstallForm(t *testing.T, ts *httptest.Server) string {
 	return string(body)
 }
 
-// TestInstalledPageLinkKeepsItsSeparators is the regression test for a bug that
-// only shows up in a real client.
+// TestInstalledPageOffersTheLinkForCopying covers the one handover the page
+// has, and the bug that only shows up in a real client.
 //
-// html/template's URL normalizer percent-encodes "|" to %7C, and template.URL
-// does not stop it — it only gets the ed2k scheme past the filter that would
-// otherwise rewrite the href to #ZgotmplZ. An escaped separator silently breaks
-// the link: a conforming parser splits on literal "|" *before* decoding, so it
-// sees one malformed field and refuses the whole thing. The page would look
-// perfectly fine while handing out a link nothing can use.
-func TestInstalledPageLinkKeepsItsSeparators(t *testing.T) {
+// Copying is it: eMuleQt's clipboard watcher matches on the ed2k://|httpcache|
+// prefix and offers to apply what it finds, so the copied text has to be the
+// canonical link, separators and all. A Chromium since version 130 cannot parse
+// an ed2k:// URL at all — "|" is a forbidden host code point — so an anchor
+// there takes the tab to about:blank#blocked and hands over nothing.
+//
+// The separator check is the part worth keeping honest. html/template's URL
+// normalizer percent-encodes "|" to %7C, and template.URL does not stop it: it
+// only gets the ed2k scheme past the filter that would otherwise rewrite an
+// href to #ZgotmplZ. An escaped separator silently breaks the link, because a
+// conforming parser splits on literal "|" *before* decoding and so sees one
+// malformed field. The page would look perfectly fine while handing out a link
+// nothing can use — which is why the last assertion here refuses an href
+// outright rather than trusting one to survive.
+func TestInstalledPageOffersTheLinkForCopying(t *testing.T) {
 	ts := newInstallServer(t)
 	page := submitInstallForm(t, ts)
 
-	m := hrefPattern.FindStringSubmatch(page)
+	if !strings.Contains(page, `id="copyLink"`) {
+		t.Errorf("the installed page has no copy control, so it has no handover at all")
+	}
+
+	m := copyPattern.FindStringSubmatch(page)
 	if m == nil {
-		t.Fatalf("no ed2k:// href on the installed page:\n%s", page)
+		t.Fatalf("no copyable ed2k link on the installed page:\n%s", page)
 	}
-	href := m[1]
-	t.Logf("output: href=%s", ed2k.Redact(href))
+	copied := m[1]
+	t.Logf("output: copyable=%s", ed2k.Redact(copied))
 
-	if strings.Contains(strings.ToLower(href), "%7c") {
-		t.Errorf("the href has percent-encoded separators; a parser splitting on | sees one field: %s", ed2k.Redact(href))
+	if !strings.HasPrefix(copied, "ed2k://|httpcache|") {
+		t.Errorf("the clipboard watcher matches on the ed2k://|httpcache| prefix, which this lacks: %s", ed2k.Redact(copied))
 	}
-	if got := strings.Count(href, "|"); got != 6 {
-		t.Errorf("the href has %d literal separators, want 6: %s", got, ed2k.Redact(href))
+	if strings.Contains(strings.ToLower(copied), "%7c") {
+		t.Errorf("the link has percent-encoded separators; a parser splitting on | sees one field: %s", ed2k.Redact(copied))
+	}
+	if got := strings.Count(copied, "|"); got != 6 {
+		t.Errorf("the link has %d literal separators, want 6: %s", got, ed2k.Redact(copied))
 	}
 
-	link, ok := ed2k.Parse(href)
+	link, ok := ed2k.Parse(copied)
 	t.Logf("parsed: ok=%t keyId=%s baseURL=%s", ok, link.KeyID, link.BaseURL)
 
 	if !ok {
@@ -131,8 +146,14 @@ func TestInstalledPageLinkKeepsItsSeparators(t *testing.T) {
 	if link.KeyID != "default" {
 		t.Errorf("keyId = %q, want default", link.KeyID)
 	}
-	if link.String() != href {
+	if link.String() != copied {
 		t.Errorf("the printed link does not round-trip")
+	}
+
+	// An anchor is inert in Chromium and re-introduces the %7C bug above, so
+	// the page must not grow one back.
+	if strings.Contains(page, `href="ed2k`) {
+		t.Errorf("the installed page has an ed2k:// href; Chromium cannot follow one and html/template escapes its separators")
 	}
 }
 

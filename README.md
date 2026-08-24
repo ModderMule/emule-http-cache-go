@@ -44,7 +44,9 @@ Building it yourself instead:
 ./bin/emule-http-cache serve
 ```
 
-`init` prints an `ed2k://|httpcache|…` link that configures eMuleQt in one click.
+`init` prints an `ed2k://|httpcache|…` link that configures eMuleQt in one step: copy it, and
+eMuleQt's clipboard watcher offers to apply it. The format is in
+[`docs/ed2k-httpcache-link.md`](docs/ed2k-httpcache-link.md).
 Prefer a browser? Start the server without a config and open `/install` — it does
 the same thing, and answers `503` on every `/v1` route until it has been through.
 
@@ -278,5 +280,5 @@ Every setting also takes an environment override: `server.addr` is `SERVER_ADDR`
 - [`docs/testing.md`](docs/testing.md) — the conformance suite and the raw-wire tests
 - [`docs/releasing.md`](docs/releasing.md) — cutting a release, and what the build workflows publish
 - [`docs/migration-from-php.md`](docs/migration-from-php.md) — moving an existing install across
-- [`docs/ed2k-httpcache-link.md`](docs/ed2k-httpcache-link.md) — the one-click configuration link format
+- [`docs/ed2k-httpcache-link.md`](docs/ed2k-httpcache-link.md) — the configuration link format
 - [`docs/nginx.conf.sample`](docs/nginx.conf.sample) — putting a reverse proxy in front

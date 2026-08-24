@@ -1,11 +1,11 @@
 # `ed2k://|httpcache|` — the HTTP Cache upload config link
 
-A one-click way to hand eMuleQt an HTTP Cache endpoint and the API key for it, in the link format
+A one-step way to hand eMuleQt an HTTP Cache endpoint and the API key for it, in the link format
 eMule users already paste around.
 
-The server's install page prints one of these. A user clicks it, eMuleQt asks "configure the HTTP
-Cache to use `cache.example.com`?", and that is the whole setup. No copying a 48-character secret out
-of a browser and into a settings dialog.
+The server's install page prints one of these. A user copies it, eMuleQt asks "configure the HTTP
+Cache to use `cache.example.com`?", and that is the whole setup. No picking a 48-character secret out
+of a browser and typing it into a settings dialog.
 
 **The link contains an upload credential.** Everything in the [Security](#security) section is
 normative, not advice.
@@ -87,6 +87,17 @@ Encoding them is legal and a parser must accept it; producing them encoded is me
 
 A `%` that is not followed by two hex digits makes the whole link invalid. Do not fall back to
 treating it literally.
+
+---
+
+## Getting the link into a client
+
+Copying is the handover: eMuleQt watches the clipboard for `ed2k://|httpcache|` and offers to apply
+what it finds, so no browser is involved. An install page should lead with a copy control.
+
+Clicking works in Safari, and in Firefox with `network.url.useDefaultURI` set to `false`. Chromium
+since version 130 cannot parse `ed2k://` URLs at all — `|` is a forbidden host code point under the
+WHATWG URL Standard — so an anchor there goes to `about:blank#blocked`.
 
 ---
 

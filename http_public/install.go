@@ -1,8 +1,6 @@
 package http_public
 
 import (
-	"html"
-	"html/template"
 	"net/http"
 	"strings"
 
@@ -29,20 +27,14 @@ type installedData struct {
 	OpenUpload    bool
 	ClaimRecorded bool
 
-	// Ed2kHref is the whole href attribute, not just its value.
+	// Ed2kLinkText is the link as page text, deliberately not as an href.
 	//
-	// template.URL is not enough here. It gets the link past html/template's
-	// scheme filter, which allows only http, https, mailto and relative
-	// references and would otherwise rewrite an ed2k:// href to #ZgotmplZ — but
-	// the URL *normalizer* still runs afterwards and percent-encodes "|" to
-	// %7C. That silently breaks the link: a conforming parser splits on literal
-	// "|" before decoding anything, so a link whose separators are escaped
-	// reads as a single malformed field and is refused outright.
-	//
-	// Handing over the finished attribute skips normalisation. The value is
-	// built by pkg/ed2k, which percent-encodes every field, and the
-	// remaining HTML metacharacters are escaped below.
-	Ed2kHref     template.HTMLAttr
+	// An anchor is how this quietly breaks: html/template's URL normalizer
+	// percent-encodes "|" to %7C even behind template.URL, and a conforming
+	// parser splits on literal "|" before decoding anything, so an escaped
+	// separator reads as one malformed field and the whole link is refused.
+	// Copying is the handover in any case — it is what eMuleQt's clipboard
+	// watcher is looking for, and it needs no browser at all.
 	Ed2kLinkText string
 }
 
@@ -71,7 +63,7 @@ type installFailedData struct {
 //	no marker          a hand-written config: this page will not read it back
 //
 // @Summary     Setup page
-// @Description This implementation's own setup page. It writes the config file, then shows the generated API key exactly once alongside a clickable ed2k:// link that configures eMuleQt in one step. Not part of the machine contract.
+// @Description This implementation's own setup page. It writes the config file, then shows the generated API key exactly once alongside the ed2k:// link that configures eMuleQt in one step. Not part of the machine contract.
 // @Tags        install
 // @Accept      x-www-form-urlencoded
 // @Produce     html
@@ -191,11 +183,7 @@ func (s *Server) show(c *gin.Context, base, keyID, secret string) {
 		Secret:        secret,
 		OpenUpload:    s.now().cfg.Upload.OpenUpload,
 		ClaimRecorded: claimed,
-		// EscapeString handles &, <, >, ' and " — everything that could break
-		// out of the attribute — and leaves "|" alone, which is the whole
-		// point. The link text goes through the template's own escaping.
-		Ed2kHref:     template.HTMLAttr(`href="` + html.EscapeString(link) + `"`),
-		Ed2kLinkText: link,
+		Ed2kLinkText:  link,
 	}, true)
 }
 

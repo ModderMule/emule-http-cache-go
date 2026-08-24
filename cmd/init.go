@@ -42,7 +42,7 @@ var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Write a config file and print the generated API key",
 	Long: "Write config.yaml and print the API key, once, alongside the ed2k:// link that\n" +
-		"configures eMuleQt in one click. The same thing the /install page does, for an\n" +
+		"configures eMuleQt in one step. The same thing the /install page does, for an\n" +
 		"operator who has a shell rather than a browser.",
 	RunE: func(cmd *cobra.Command, args []string) error {
 		form := install.FormDefaults()

@@ -36,7 +36,7 @@
         },
         "/install": {
             "get": {
-                "description": "This implementation's own setup page. It writes the config file, then shows the generated API key exactly once alongside a clickable ed2k:// link that configures eMuleQt in one step. Not part of the machine contract.",
+                "description": "This implementation's own setup page. It writes the config file, then shows the generated API key exactly once alongside the ed2k:// link that configures eMuleQt in one step. Not part of the machine contract.",
                 "consumes": [
                     "application/x-www-form-urlencoded"
                 ],

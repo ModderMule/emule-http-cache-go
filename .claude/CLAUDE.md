@@ -10,3 +10,9 @@
 - when returning new `MsgCode` strings on errors, ensure translations in `locales` folder are updated
 - use `uint64` as Primary Keys and put GORM default time columns at the end of the table 
 
+## JavaScript & TypeScript coding standards
+- if JavaScript is needed: Use modern TypeScript code with classes and typed APIs
+- Use strict typing - avoid `any` types when possible
+- when installing packages, add TypeScript typings to `package.json` as `devDependencies` where available
+- Leverage TypeScript's type inference where appropriate while maintaining clarity
+- use PNPM as package manager

@@ -17,6 +17,7 @@
   .check{display:flex;gap:.6rem;align-items:flex-start;margin:.9rem 0}
   .check input{margin-top:.35rem}
   button{font:inherit;font-weight:600;padding:.5rem 1.1rem;border:0;border-radius:4px;background:#1d4ed8;color:#fff;cursor:pointer}
+  button.copy{margin-right:.6rem}
   .box{border:1px solid #d4d4d8;border-radius:5px;padding:.85rem 1rem;margin:1rem 0;background:#fafafa}
   .warn{border-color:#f59e0b;background:#fffbeb}
   .bad{border-color:#dc2626;background:#fef2f2}
