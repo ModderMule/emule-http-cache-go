@@ -21,7 +21,7 @@ import (
 	stdlog "log"
 	"net"
 	"net/http"
-	"os"
+	"net/netip"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -34,6 +34,7 @@ import (
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
 	"github.com/ModderMule/emule-http-cache-go/internal/traffic"
 	"github.com/ModderMule/emule-http-cache-go/log"
+	"github.com/ModderMule/emule-http-cache-go/pkg/publicaddr"
 	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 
 	// Registers the generated OpenAPI spec served at /swagger.
@@ -231,8 +232,9 @@ func (s *Server) StartServer(ctx context.Context) error {
 	} else {
 		s.logger.Warnf("not installed yet — every /v1 route answers 503 until a config file exists")
 	}
-	s.logger.Infof("Server ready — open %s", serverURL(s.listen))
-	s.logger.Infof("API docs — open %s/swagger/index.html", serverURL(s.listen))
+	ready := s.startupURL()
+	s.logger.Infof("Server ready — open %s", ready)
+	s.logger.Infof("API docs — open %s/swagger/index.html", ready)
 
 	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		return err
@@ -289,20 +291,33 @@ func (s *Server) requireInstalled(c *gin.Context) bool {
 	return false
 }
 
-// serverURL turns a listen address into something clickable in a log line.
-func serverURL(addr string) string {
-	host, port, err := net.SplitHostPort(addr)
+// startupURL is the address the startup log lines point at.
+func (s *Server) startupURL() string {
+	return startupURL(s.now().cfg.Server.PublicBaseURL, s.listen, s.timeouts.BasePath, publicaddr.Local())
+}
+
+// startupURL turns a listen address into something another machine can open.
+//
+// A pinned public base URL wins: it is what the operator declared. A listener
+// on every interface is shown by an interface address rather than the host
+// name, which need not resolve anywhere else. No echo service is asked, so
+// behind a router this is the LAN address.
+func startupURL(pinned, listen, basePath string, locals []netip.Addr) string {
+	if pinned != "" {
+		return pinned + basePath
+	}
+
+	host, port, err := net.SplitHostPort(listen)
 	if err != nil {
-		return "http://" + addr
+		return "http://" + listen + basePath
 	}
 
 	if host == "" || host == "0.0.0.0" || host == "::" {
-		if name, err := os.Hostname(); err == nil && name != "" {
-			host = name
-		} else {
-			host = "localhost"
+		if found := publicaddr.Choose(netip.Addr{}, locals, listen); found.Kind != publicaddr.None {
+			return found.BaseURL() + basePath
 		}
+		host = "localhost"
 	}
 
-	return "http://" + net.JoinHostPort(host, port)
+	return "http://" + net.JoinHostPort(host, port) + basePath
 }
