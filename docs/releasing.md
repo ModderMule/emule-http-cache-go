@@ -81,6 +81,10 @@ Windows gets a `.tar.gz` like the others rather than a `.zip`, because the
 Only the tag build attaches to a release. A `workflow_dispatch` run on a branch
 still uploads a downloadable artifact, it just has no release to attach it to.
 
+The release step sets `fail_on_unmatched_files: true`, so a build that produced
+no archive fails its run rather than leaving that platform out of the draft
+without a word.
+
 CI uses the built-in `GITHUB_TOKEN` with `permissions: contents: write`. No
 personal access token is needed or wanted.
 

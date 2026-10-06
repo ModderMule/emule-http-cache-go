@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
+	"github.com/ModderMule/emule-http-cache-go/pkg/baseurl"
 	"github.com/ModderMule/emule-http-cache-go/pkg/ed2k"
 )
 
@@ -17,6 +18,11 @@ type installFormData struct {
 	Values          map[string]string
 	Errors          map[string]string
 	DetectedBaseURL string
+
+	// LoopbackBase is set when the page was opened by a name for this machine
+	// itself, like localhost. A blank base URL field would then put that name
+	// into the link, where a client on another machine cannot use it.
+	LoopbackBase bool
 }
 
 // installedData renders the one page that shows the key.
@@ -26,6 +32,10 @@ type installedData struct {
 	Secret        string
 	OpenUpload    bool
 	ClaimRecorded bool
+
+	// LoopbackBase is set when BaseURL names this machine itself, so the link
+	// below works nowhere else.
+	LoopbackBase bool
 
 	// Ed2kLinkText is the link as page text, deliberately not as an href.
 	//
@@ -85,6 +95,7 @@ func (s *Server) handleInstall(c *gin.Context) {
 			Values:          install.FormDefaults(),
 			Errors:          map[string]string{},
 			DetectedBaseURL: base,
+			LoopbackBase:    baseurl.IsLoopback(base),
 		}, false)
 
 		return
@@ -129,6 +140,7 @@ func (s *Server) runInstall(c *gin.Context, base string) {
 			Values:          submitted,
 			Errors:          errs,
 			DetectedBaseURL: base,
+			LoopbackBase:    baseurl.IsLoopback(base),
 		}, false)
 
 		return
@@ -147,7 +159,10 @@ func (s *Server) runInstall(c *gin.Context, base string) {
 	}
 
 	s.activate()
-	s.show(c, base, settings.KeyID, secret)
+
+	// Asked for again rather than reusing base: the form may just have pinned a
+	// public base URL, and the link has to carry that one.
+	s.show(c, s.pageBaseURL(c), settings.KeyID, secret)
 }
 
 // disclose shows a key whose install ran but whose page never rendered.
@@ -183,6 +198,7 @@ func (s *Server) show(c *gin.Context, base, keyID, secret string) {
 		Secret:        secret,
 		OpenUpload:    s.now().cfg.Upload.OpenUpload,
 		ClaimRecorded: claimed,
+		LoopbackBase:  baseurl.IsLoopback(base),
 		Ed2kLinkText:  link,
 	}, true)
 }

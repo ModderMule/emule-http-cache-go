@@ -20,6 +20,12 @@ which nobody can authenticate as, so they cannot be deleted through the API and 
 lapse at their TTL. Watch the disk, and keep the anonymous daily limit honest.</p>
 {{ end }}
 <h2>Configure eMuleQt</h2>
+{{ if .LoopbackBase }}
+<p class="box warn"><strong>This link only works on this machine.</strong> Its base URL is
+<code>{{ .BaseURL }}</code>, which a client anywhere else cannot reach. Before copying it,
+replace that part with the address other machines reach this server on, and set
+<code>server.public_base_url</code> in the config file to the same address.</p>
+{{ end }}
 <p><button type="button" class="copy" id="copyLink">Copy the link</button>
 <span class="muted" id="copyNote" hidden></span></p>
 <p><code id="ed2kLink">{{ .Ed2kLinkText }}</code></p>

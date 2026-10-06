@@ -5,6 +5,12 @@ choose your settings and press the button, and the next page will show you the A
 {{ if .Errors }}
 <p class="box bad">Nothing has been written. Fix the fields marked below and submit again.</p>
 {{ end }}
+{{ if .LoopbackBase }}
+<p class="box warn"><strong>You opened this page as <code>{{ .DetectedBaseURL }}</code>, which only
+works on this machine.</strong> Left blank, the public base URL below takes that address, and
+the link on the next page will be useless to a client anywhere else. Fill it in with the
+address other machines reach this server on, or reopen this page by that address.</p>
+{{ end }}
 <form method="post" action="{{ .Action }}">
 {{ range .Fields }}
 {{ if eq .Kind "checkbox" }}

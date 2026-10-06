@@ -25,6 +25,8 @@ tar xzf emule-http-cache-<version>-linux-amd64.tar.gz
 ./emule-http-cache serve
 ```
 
+Instead of `init`, you can skip straight to `serve` and open `http://<ip>:8080/install` in a browser.
+
 Builds are published for `linux-amd64`, `macos-arm64` and `win64`. Each carries a
 `.sha256` next to it:
 
@@ -69,8 +71,19 @@ Building it yourself instead:
 `init` prints an `ed2k://|httpcache|…` link that configures eMuleQt in one step: copy it, and
 eMuleQt's clipboard watcher offers to apply it. The format is in
 [`docs/ed2k-httpcache-link.md`](docs/ed2k-httpcache-link.md).
+
+That link needs an address other machines can reach, and `init` has no request to read one
+from. So it asks a public echo service (ipify, icanhazip, Cloudflare) for this machine's
+address, falls back to the network interfaces when none answers, and pins the result as
+`server.public_base_url`. It says which it was: a confirmed public address, a public address
+behind a router that still needs a port forward, or a private one that only works on the LAN.
+Pass `--public-base-url http://cache.example.com` to name the address yourself — `init` then
+makes no network request at all.
+
 Prefer a browser? Start the server without a config and open `/install` — it does
 the same thing, and answers `503` on every `/v1` route until it has been through.
+Open it by the address clients will use: the link is built from the address in your browser,
+and the page warns you if that is `localhost`.
 
 Interactive API docs are at `/swagger/index.html`.
 

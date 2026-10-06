@@ -21,6 +21,7 @@ import (
 var (
 	copyPattern   = regexp.MustCompile(`<code id="ed2kLink">([^<]*)</code>`)
 	secretPattern = regexp.MustCompile(`<span class="key">([0-9a-f]{48})</span>`)
+	secretField   = regexp.MustCompile(`\|[0-9a-f]{48}\|`)
 )
 
 // newInstallServer starts a server with no config, so /install is the whole
@@ -71,6 +72,14 @@ func newInstallServer(t *testing.T) *httptest.Server {
 func submitInstallForm(t *testing.T, ts *httptest.Server) string {
 	t.Helper()
 
+	return submitInstallFormWith(t, ts, "")
+}
+
+// submitInstallFormWith is submitInstallForm with the public base URL field
+// filled in.
+func submitInstallFormWith(t *testing.T, ts *httptest.Server, publicBaseURL string) string {
+	t.Helper()
+
 	form := url.Values{
 		"keyId":             {"default"},
 		"openUploadQuotaGb": {"10"},
@@ -78,7 +87,7 @@ func submitInstallForm(t *testing.T, ts *httptest.Server) string {
 		"minFreeGb":         {"1"},
 		"defaultTtlHours":   {"48"},
 		"maxTtlHours":       {"168"},
-		"publicBaseUrl":     {""},
+		"publicBaseUrl":     {publicBaseURL},
 	}
 
 	resp, err := ts.Client().PostForm(ts.URL+"/install", form)
@@ -268,4 +277,68 @@ func TestBadFormWritesNothing(t *testing.T) {
 	if info.StatusCode != http.StatusServiceUnavailable {
 		t.Errorf("a refused form installed something: /v1/info = %d, want 503", info.StatusCode)
 	}
+}
+
+// TestLoopbackAddressIsCalledOut covers a link that looks fine and works
+// nowhere: the test server is reached on 127.0.0.1, which is exactly what an
+// operator browsing to localhost looks like.
+func TestLoopbackAddressIsCalledOut(t *testing.T) {
+	const formWarning = "which only\nworks on this machine"
+	const linkWarning = "This link only works on this machine."
+
+	t.Run("the form warns before anything is written", func(t *testing.T) {
+		ts := newInstallServer(t)
+
+		resp, err := ts.Client().Get(ts.URL + "/install")
+		if err != nil {
+			t.Fatalf("GET /install: %v", err)
+		}
+		defer resp.Body.Close()
+
+		body, _ := io.ReadAll(resp.Body)
+		t.Logf("input:  GET %s/install", ts.URL)
+		t.Logf("output: %d, warning shown: %v", resp.StatusCode, strings.Contains(string(body), formWarning))
+
+		if !strings.Contains(string(body), formWarning) {
+			t.Errorf("the form does not warn about a loopback address. body:\n%s", body)
+		}
+	})
+
+	t.Run("a blank base URL yields a link that says so", func(t *testing.T) {
+		ts := newInstallServer(t)
+
+		page := submitInstallForm(t, ts)
+		link := copyPattern.FindStringSubmatch(page)
+		t.Logf("input:  POST %s/install, public base URL blank", ts.URL)
+		t.Logf("output: warning shown: %v, link: %s", strings.Contains(page, linkWarning), scrubLink(link))
+
+		if !strings.Contains(page, linkWarning) {
+			t.Errorf("the installed page does not warn about a loopback link")
+		}
+	})
+
+	t.Run("a pinned base URL is the one in the link", func(t *testing.T) {
+		ts := newInstallServer(t)
+
+		page := submitInstallFormWith(t, ts, "http://cache.example.com")
+		link := copyPattern.FindStringSubmatch(page)
+		t.Logf("input:  POST %s/install, public base URL http://cache.example.com", ts.URL)
+		t.Logf("output: warning shown: %v, link: %s", strings.Contains(page, linkWarning), scrubLink(link))
+
+		if strings.Contains(page, linkWarning) {
+			t.Errorf("the installed page warns although a public base URL was pinned")
+		}
+		if link == nil || !strings.Contains(link[1], "|http://cache.example.com|") {
+			t.Errorf("the link does not carry the pinned base URL: %s", scrubLink(link))
+		}
+	})
+}
+
+// scrubLink is a matched link with its secret removed, for the log.
+func scrubLink(match []string) string {
+	if match == nil {
+		return "(none)"
+	}
+
+	return secretField.ReplaceAllString(match[1], "|<secret>|")
 }

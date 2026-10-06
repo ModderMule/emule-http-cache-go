@@ -6,6 +6,7 @@
 package baseurl
 
 import (
+	"net/netip"
 	"net/url"
 	"strings"
 )
@@ -41,4 +42,25 @@ func Normalize(raw string) (string, bool) {
 	}
 
 	return strings.TrimRight(raw, "/"), true
+}
+
+// IsLoopback reports whether a base URL names the machine it is opened on:
+// localhost, a name under .localhost, or a loopback address.
+//
+// Such a URL is fine in the operator's own browser and useless in a link meant
+// for a client somewhere else.
+func IsLoopback(base string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(base))
+	if err != nil {
+		return false
+	}
+
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+
+	addr, err := netip.ParseAddr(host)
+
+	return err == nil && addr.Unmap().IsLoopback()
 }
