@@ -32,6 +32,28 @@ Builds are published for `linux-amd64`, `macos-arm64` and `win64`. Each carries 
 shasum -a 256 -c emule-http-cache-<version>-linux-amd64.tar.gz.sha256
 ```
 
+Or let the updater do all of that — it picks the archive for your platform,
+verifies the checksum, unpacks it into the current directory and starts the
+server:
+
+```sh
+curl -fLO https://github.com/ModderMule/emule-http-cache-go/releases/latest/download/update.sh
+bash update.sh
+```
+
+### Updating
+
+Every archive carries the same script as `scripts/update.sh`. Run it from an
+install to move to the latest published release; `config.yaml` and `data/` are
+left alone.
+
+```sh
+./scripts/update.sh                          # install the latest release, then serve
+./scripts/update.sh --config /etc/ehc.yaml   # arguments go to `serve`
+UPDATE_VERSION=v0.1.3 ./scripts/update.sh    # a specific tag
+UPDATE_NO_START=1 ./scripts/update.sh        # install only, e.g. under systemd
+```
+
 [releases]: https://github.com/ModderMule/emule-http-cache-go/releases
 
 ## Quick start

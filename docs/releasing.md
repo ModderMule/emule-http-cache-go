@@ -139,7 +139,7 @@ stripped, so a remote carrying a token does not echo it to the terminal.
 
 `scripts/bundle.sh` drives the `bundle` subcommand, so the layout is flat: the
 binary sits at the archive root, which is what `scripts/update.sh` expects when
-it untars and runs `./emule-http-cache serve`.
+it unpacks a release over an install and runs `./emule-http-cache serve`.
 
 ```
 emule-http-cache            (or emule-http-cache.exe)
@@ -160,6 +160,25 @@ but" form, so `bundle.sh` walks `scripts/*.sh` and excludes everything except
 `update.sh`. That list used to be written out by hand and it rotted immediately —
 `bump-version.sh` and `publish-release.sh` shipped inside the v0.1.1 archives.
 Generating it means a new script is excluded the moment it is added.
+
+## The self-updater
+
+`scripts/update.sh` resolves the latest release through the GitHub API,
+downloads the archive for the host platform, checks it against its `.sha256`,
+copies the files over the install and starts the server. It depends on the
+archive names in the table above and on the flat layout, so changing either
+means changing the script in the same release.
+
+It asks for `releases/latest`, which ignores drafts and pre-releases: installs
+only see a release once its draft is published.
+
+`linux.yml` also attaches the script to the release as a standalone asset, which
+gives a fresh install a stable bootstrap URL,
+`releases/latest/download/update.sh`. Only that one workflow uploads it — three
+uploading the same asset name would race each other.
+
+Run from a source checkout it refuses, rather than unpacking a release over the
+tree.
 
 ## Building without releasing
 
