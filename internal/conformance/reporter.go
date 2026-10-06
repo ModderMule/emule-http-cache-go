@@ -11,7 +11,7 @@ package conformance
 // Reporter receives everything the suite observes.
 //
 // The test reporter forwards Logf to t.Logf, which is what gives the project's
-// "log program input and output" rule to all 31 assertions at once: the traced
+// "log program input and output" rule to every assertion at once: the traced
 // RoundTripper reports every request and response through here, so no
 // assertion has to remember to log anything itself.
 type Reporter interface {

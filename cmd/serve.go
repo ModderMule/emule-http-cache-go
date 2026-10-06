@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -10,6 +11,7 @@ import (
 	"github.com/ModderMule/emule-http-cache-go/http_public"
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
+	"github.com/ModderMule/emule-http-cache-go/internal/traffic"
 	"github.com/ModderMule/emule-http-cache-go/log"
 	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 )
@@ -51,19 +53,30 @@ var serveCmd = &cobra.Command{
 		sweeper := newSweeper(ctx, logger)
 		defer sweeper.stop()
 
+		// One set of counters for the life of the process, shared by the HTTP
+		// server and every sweeper the install page may yet start.
+		recorder := traffic.NewRecorder()
+		newGc := func(cfg *config.Config, store *storage.Store, quota *storage.Quota) *storage.Gc {
+			gc := storage.NewGc(cfg, store, quota)
+			gc.OnExpire = func(chunks int) { recorder.Expired(chunks, time.Now()) }
+
+			return gc
+		}
+
 		store := storage.NewStore(cfg)
 		quota := storage.NewQuota(cfg)
 		installed := config.Installed()
 
 		if installed {
-			sweeper.restart(storage.NewGc(cfg, store, quota))
+			sweeper.restart(newGc(cfg, store, quota))
 		}
 
 		srv, err := http_public.New(http_public.Deps{
 			Config:    cfg,
 			Store:     store,
 			Quota:     quota,
-			GC:        storage.NewGc(cfg, store, quota),
+			GC:        newGc(cfg, store, quota),
+			Traffic:   recorder,
 			Installer: installer,
 			Logger:    logger,
 			AccessLog: log.NewConfig(viper.GetViper()).AccessLog,
@@ -87,7 +100,7 @@ var serveCmd = &cobra.Command{
 
 				newStore := storage.NewStore(fresh)
 				newQuota := storage.NewQuota(fresh)
-				sweeper.restart(storage.NewGc(fresh, newStore, newQuota))
+				sweeper.restart(newGc(fresh, newStore, newQuota))
 
 				return fresh, newStore, newQuota, nil
 			},

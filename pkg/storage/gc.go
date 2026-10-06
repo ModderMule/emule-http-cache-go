@@ -38,6 +38,11 @@ type Gc struct {
 
 	store *Store
 	quota *Quota
+
+	// OnExpire, when set, is told how many chunks a sweep reclaimed. It is the
+	// chunk count alone: Sweep's own return value also counts the temp files
+	// and quota counters it reaped.
+	OnExpire func(chunks int)
 }
 
 // NewGc builds a collector over a store and its quota accountant.
@@ -68,6 +73,10 @@ func (g *Gc) Sweep(maxDeletes int) int {
 		if g.store.Delete(id) {
 			deleted++
 		}
+	}
+
+	if g.OnExpire != nil && deleted > 0 {
+		g.OnExpire(deleted)
 	}
 
 	for _, shard := range g.shards() {

@@ -9,7 +9,8 @@ main.go               three lines of body, plus the swagger general-info block
 cmd/                  cobra commands: serve, init, gc, conformance, bundle, version
 log/                  zap + lumberjack behind a small Logger interface
 internal/config       viper loading, defaulting and validation
-internal/security     API-key authentication
+internal/security     API-key authentication, and whose address a request counts as
+internal/traffic      in-memory request counters and distinct-caller sketches
 internal/install      writes config.yaml and the install marker
 internal/conformance  the portable contract test
 pkg/storage           the filesystem blob store, quota accounting and the expiry sweep
@@ -121,6 +122,58 @@ goroutines that each opened the path genuinely contend — the opposite of POSIX
 `fcntl` record locks, which are per-process and would be silently useless inside
 one daemon. On platforms without `flock` the in-process mutex is the only guard,
 and `serve` says so once at startup.
+
+## Counting without keeping anything
+
+`GET /v1/stats` reports two different kinds of figure, and they are produced in
+two different ways.
+
+**What the store holds is read off the disk.** `Store.Usage` walks the shards,
+one stat and one sidecar read per chunk, and `http_public` reuses the answer for
+five seconds. There is no running count because this process is not the only
+writer: the `gc` subcommand and a co-resident PHP install both change the
+directory, and a counter would be right only until the first of them ran.
+
+**What the server did is counted in memory.** `internal/traffic` holds a total
+and 25 hourly buckets per counter — the hour in progress and the 24 before it —
+so "last 24h" covers between 24 and 25 hours and nothing has to be timestamped.
+A gin middleware reads each `/v1` response's status and size after the handler
+returns, so a new refusal path is counted without anyone remembering to. The
+counters start at zero with the process, which is why the response carries
+`startedAt`. They survive the install-page reload, because the recorder is owned
+by `cmd/serve.go` and not by the state that reload swaps.
+
+**Distinct callers are estimated, and no address is stored.** Counting them
+exactly means remembering every address, which this server has so far avoided
+even in its access log. It uses HyperLogLog instead:
+
+- Each address is hashed to 64 uniform bits. Among *n* distinct random values
+  the longest run of leading zeros is about log2(*n*) — a hash starting with
+  twenty zeros turns up roughly once in a million — so "the longest run seen"
+  estimates *n* in a single byte.
+- One such estimate is far too noisy, so the first 14 bits of the hash pick one
+  of 16,384 registers and each keeps the longest run among the hashes routed to
+  it. The answer is a harmonic mean over all of them, replaced by a count of the
+  still-empty registers while most are empty, which is near-exact for the few
+  hundred callers a small server sees.
+- A sketch is 16 KB however many addresses it has seen, a repeat changes
+  nothing, and two sketches merge by taking the larger of each register. The
+  merge is what makes a rolling window possible: one sketch per hour, 25 of them
+  merged on read, plus one that is never cleared — about 420 KB in all.
+- The standard error is 1.04/√16384, about 0.8 %. A register holds a number
+  below 52 and the hash seed is random per process, so an address can neither be
+  read back nor tested for.
+
+An IPv6 caller is counted by its /64, since privacy extensions give one host
+many addresses inside its prefix.
+
+**Whose address it is** is decided in `internal/security`. The peer on the other
+end of the connection, unless that peer is loopback, in which case it is a
+reverse proxy on this host and its `X-Real-IP`, or the last hop of
+`X-Forwarded-For`, is believed. A remote peer's headers are ignored, so a caller
+cannot be someone else. The same headers gate `/v1/stats` from the other side: a
+loopback request may read it with no key only if it carries no forwarding header
+at all, because behind nginx every request is a loopback request.
 
 ## Hot reload after a browser install
 

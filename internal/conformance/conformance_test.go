@@ -20,8 +20,8 @@ var (
 	apiKey  = flag.String("key", "", "API key for -base")
 )
 
-// tReporter routes the suite's own trace into the test log, which is how all 31
-// assertions satisfy the project's "log program input and output" rule without
+// tReporter routes the suite's own trace into the test log, which is how every
+// assertion satisfies the project's "log program input and output" rule without
 // a single per-assertion logging call.
 type tReporter struct{ t *testing.T }
 

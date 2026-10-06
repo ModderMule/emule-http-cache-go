@@ -119,6 +119,59 @@ func TestMetaHidesExpiredAndIncompleteChunks(t *testing.T) {
 	})
 }
 
+func TestUsage(t *testing.T) {
+	cfg := testConfig(t)
+	store := NewStore(cfg)
+	now := time.Now()
+
+	step := func(label string, want Usage) {
+		t.Helper()
+
+		got := store.Usage(now)
+		t.Logf("input:  %s", label)
+		t.Logf("output: %+v", got)
+
+		if got != want {
+			t.Errorf("%s: usage = %+v, want %+v", label, got, want)
+		}
+	}
+
+	step("an empty store", Usage{})
+
+	live, err := store.Ingest(bytes.NewReader([]byte("ciphertext")), "k", time.Hour, 10)
+	if err != nil {
+		t.Fatalf("storing a live chunk: %v", err)
+	}
+	if _, err := store.Ingest(bytes.NewReader([]byte("more ciphertext")), "k", time.Hour, 15); err != nil {
+		t.Fatalf("storing a second live chunk: %v", err)
+	}
+	step("two live chunks of 10 and 15 bytes", Usage{Chunks: 2, Bytes: 25})
+
+	// Still on disk until a sweep, so still part of the footprint.
+	if _, err := store.Ingest(bytes.NewReader([]byte("dead")), "k", -time.Hour, 4); err != nil {
+		t.Fatalf("storing an expired chunk: %v", err)
+	}
+	step("plus an expired chunk of 4 bytes", Usage{Chunks: 3, Bytes: 29, ExpiredChunks: 1, ExpiredBytes: 4})
+
+	// A sidecar is written before its blob is renamed into place, so one with
+	// no blob is an upload in progress, not a chunk.
+	inFlight := "abcdef0123456789abcdef0123456789"
+	if err := os.MkdirAll(filepath.Dir(store.MetaPath(inFlight)), 0o775); err != nil {
+		t.Fatalf("creating a shard: %v", err)
+	}
+	if err := os.WriteFile(store.MetaPath(inFlight), []byte(`{"id":"`+inFlight+`","size":99}`), 0o664); err != nil {
+		t.Fatalf("staging a sidecar: %v", err)
+	}
+	step("plus a sidecar with no blob", Usage{Chunks: 3, Bytes: 29, ExpiredChunks: 1, ExpiredBytes: 4})
+
+	// The sweep reclaims a chunk whose sidecar it cannot read, so the figures
+	// must already call it expired.
+	if err := os.WriteFile(store.MetaPath(live.ID), []byte("not json"), 0o664); err != nil {
+		t.Fatalf("corrupting a sidecar: %v", err)
+	}
+	step("with one live sidecar corrupted", Usage{Chunks: 3, Bytes: 29, ExpiredChunks: 2, ExpiredBytes: 14})
+}
+
 func TestIngestRefusals(t *testing.T) {
 	cfg := testConfig(t)
 	store := NewStore(cfg)

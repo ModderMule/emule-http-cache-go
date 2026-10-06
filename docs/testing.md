@@ -10,7 +10,7 @@ standards, so `go test -v` reads as a transcript of what was tried.
 
 ## The contract test
 
-`internal/conformance` is the portable one: 31 assertions over the whole REST
+`internal/conformance` is the portable one: 35 assertions over the whole REST
 surface, speaking nothing but HTTP. It is a library with no `testing` import so
 it can be driven two ways.
 
@@ -35,11 +35,19 @@ go test ./internal/conformance -base http://localhost/emule-http-cache-php -key 
 ```
 
 The suite reads `uploadRequiresAuth` from `/v1/info` and asserts what that server
-actually promises, so an open server passes the same 31.
+actually promises, so an open server passes the same 35.
+
+`GET /v1/stats` is an extension of this server rather than part of the contract,
+so its section is optional: four more assertions when the route answers, and a
+`skip` line instead of a failure when it answers `404`, or `401` to a run that
+was given no key. That is why this server reports 39 and the PHP reference
+server 35, and both pass. The section checks the shape of the figures only —
+they are cached for a few seconds and shared with every other caller, so no
+exact value can be asserted from outside.
 
 Its `http.RoundTripper` reports every exchange to the reporter — method, URL,
 headers, body length and digest, never bodies — and the test reporter is `t`. So
-the logging requirement is met once, structurally, rather than thirty-one times
+the logging requirement is met once, structurally, rather than thirty-five times
 by hand. Credentials are redacted and chunk ids are never expanded.
 
 ## What the contract test cannot reach

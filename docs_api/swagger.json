@@ -312,9 +312,82 @@
                     }
                 }
             }
+        },
+        "/v1/stats": {
+            "get": {
+                "description": "For the operator. Needs an enabled API key, except from a caller on the server itself: a loopback connection carrying no X-Forwarded-For, X-Real-IP or Forwarded header. A request relayed by a reverse proxy always needs the key. An extension of this implementation, not part of the contract — another backend may answer 404. Counters are held in memory and count from startedAt.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "ops"
+                ],
+                "summary": "Storage and traffic figures",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Bearer \u003capiKey\u003e. Optional only for a caller on the server itself.",
+                        "name": "Authorization",
+                        "in": "header"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/http_public.StatsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "bad or missing API key",
+                        "schema": {
+                            "$ref": "#/definitions/http_public.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "server not installed",
+                        "schema": {
+                            "$ref": "#/definitions/http_public.ErrorResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "http_public.ClientStats": {
+            "type": "object",
+            "properties": {
+                "approximate": {
+                    "description": "Approximate is always true. The server keeps no addresses; it counts them\nwith HyperLogLog sketches, which are exact for a handful of callers and\nwithin about 1 % beyond that. An IPv6 caller is counted by its /64.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "last24h": {
+                    "type": "integer",
+                    "example": 97
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 842
+                }
+            }
+        },
+        "http_public.CounterStats": {
+            "type": "object",
+            "properties": {
+                "last24h": {
+                    "description": "Last24h is kept in hourly buckets, so it covers the hour in progress and\nthe 24 before it: between 24 and 25 hours.",
+                    "type": "integer",
+                    "example": 310
+                },
+                "total": {
+                    "description": "Total counts since startedAt.",
+                    "type": "integer",
+                    "example": 5210
+                }
+            }
+        },
         "http_public.ErrorResponse": {
             "type": "object",
             "properties": {
@@ -363,6 +436,109 @@
                 "version": {
                     "type": "integer",
                     "example": 1
+                }
+            }
+        },
+        "http_public.RejectedStats": {
+            "type": "object",
+            "properties": {
+                "notFound": {
+                    "$ref": "#/definitions/http_public.CounterStats"
+                },
+                "quotaExceeded": {
+                    "$ref": "#/definitions/http_public.CounterStats"
+                },
+                "storageFull": {
+                    "$ref": "#/definitions/http_public.CounterStats"
+                },
+                "tooLarge": {
+                    "$ref": "#/definitions/http_public.CounterStats"
+                },
+                "unauthorized": {
+                    "$ref": "#/definitions/http_public.CounterStats"
+                }
+            }
+        },
+        "http_public.StatsResponse": {
+            "type": "object",
+            "properties": {
+                "clients": {
+                    "$ref": "#/definitions/http_public.ClientStats"
+                },
+                "startedAt": {
+                    "description": "StartedAt is when this process started, in unix seconds. Every \"total\"\nbelow counts from here: the counters live in memory and a restart zeroes\nthem.",
+                    "type": "integer",
+                    "example": 1791283200
+                },
+                "storage": {
+                    "$ref": "#/definitions/http_public.StorageStats"
+                },
+                "traffic": {
+                    "$ref": "#/definitions/http_public.TrafficStats"
+                }
+            }
+        },
+        "http_public.StorageStats": {
+            "type": "object",
+            "properties": {
+                "asOf": {
+                    "description": "AsOf is when the store was last walked, in unix seconds. The figures are\nreused for a few seconds.",
+                    "type": "integer",
+                    "example": 1791369600
+                },
+                "bytes": {
+                    "type": "integer",
+                    "example": 11712531264
+                },
+                "chunks": {
+                    "description": "Chunks and Bytes cover every chunk present, expired or not.",
+                    "type": "integer",
+                    "example": 1204
+                },
+                "expiredBytes": {
+                    "type": "integer",
+                    "example": 359936592
+                },
+                "expiredChunks": {
+                    "description": "ExpiredChunks and ExpiredBytes are the part of the above that is past its\nTTL and waiting for the next sweep.",
+                    "type": "integer",
+                    "example": 37
+                }
+            }
+        },
+        "http_public.TrafficStats": {
+            "type": "object",
+            "properties": {
+                "deletes": {
+                    "$ref": "#/definitions/http_public.CounterStats"
+                },
+                "downloadedBytes": {
+                    "$ref": "#/definitions/http_public.CounterStats"
+                },
+                "downloads": {
+                    "description": "Downloads counts GET responses that carried chunk bytes, whole or a\nRange. DownloadedBytes is what was actually sent, so an interrupted\ntransfer counts for as far as it got.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/http_public.CounterStats"
+                        }
+                    ]
+                },
+                "gcExpired": {
+                    "description": "GCExpired counts chunks reclaimed by this process's own sweeper. A `gc`\nrun from cron is another process and is not seen here.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/http_public.CounterStats"
+                        }
+                    ]
+                },
+                "rejected": {
+                    "$ref": "#/definitions/http_public.RejectedStats"
+                },
+                "uploadedBytes": {
+                    "$ref": "#/definitions/http_public.CounterStats"
+                },
+                "uploads": {
+                    "$ref": "#/definitions/http_public.CounterStats"
                 }
             }
         },

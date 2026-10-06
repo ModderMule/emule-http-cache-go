@@ -177,6 +177,64 @@ eMuleQt does **not** call this automatically: a failed download is as likely to
 be the downloader's or the network's fault as the blob's, so entries lapse at
 their TTL instead. It exists for explicit cleanup.
 
+### `GET /v1/stats`
+
+How full and how busy the server is, for whoever runs it. **An extension of this
+implementation, not part of the contract**: no client calls it, the PHP
+reference server answers `404`, and a conforming backend may do the same.
+
+`Authorization: Bearer <apiKey>` with any enabled key. A caller on the server
+itself needs none — a loopback connection carrying no `X-Forwarded-For`,
+`X-Real-IP` or `Forwarded` header — so `curl localhost:8080/v1/stats` works from
+a shell while a request relayed by nginx always needs the key.
+
+```json
+{
+  "startedAt": 1791283200,
+  "storage": {
+    "chunks": 1204,
+    "bytes": 11712531264,
+    "expiredChunks": 37,
+    "expiredBytes": 359936592,
+    "asOf": 1791369600
+  },
+  "traffic": {
+    "uploads":         { "total": 5210,        "last24h": 310 },
+    "uploadedBytes":   { "total": 50683000000, "last24h": 3015000000 },
+    "downloads":       { "total": 18422,       "last24h": 1207 },
+    "downloadedBytes": { "total": 91200000000, "last24h": 6100000000 },
+    "deletes":         { "total": 96,          "last24h": 4 },
+    "gcExpired":       { "total": 4010,        "last24h": 288 },
+    "rejected": {
+      "unauthorized":  { "total": 12,  "last24h": 0 },
+      "notFound":      { "total": 733, "last24h": 41 },
+      "tooLarge":      { "total": 1,   "last24h": 0 },
+      "quotaExceeded": { "total": 9,   "last24h": 9 },
+      "storageFull":   { "total": 0,   "last24h": 0 }
+    }
+  },
+  "clients": { "total": 842, "last24h": 97, "approximate": true }
+}
+```
+
+- **`storage`** is read off the disk and reused for five seconds; `asOf` is when.
+  `chunks` and `bytes` cover everything present, including chunks past their TTL
+  that the next sweep will remove, which `expiredChunks` and `expiredBytes`
+  break out.
+- **`traffic`** is counted in memory. `total` runs from `startedAt` and a restart
+  zeroes it; `last24h` is kept in hourly buckets, so it covers 24 to 25 hours.
+  A download is a `GET` that returned chunk bytes, whole or a `Range`, and
+  `downloadedBytes` is what was actually sent. `gcExpired` sees this process's
+  own sweeper, not a `gc` run from cron. `rejected` counts `/v1` responses by
+  status: `401`, `404`, `413`, `429`, `507`.
+- **`clients`** is the number of distinct addresses that called a `/v1` route
+  other than this one. It is an estimate: the server keeps no addresses and
+  counts them with HyperLogLog, exact for a handful and within about 1 % beyond.
+  Behind a reverse proxy on the same host the address is taken from `X-Real-IP`.
+  See `docs/architecture.md`.
+
+Errors: `401` bad/missing key.
+
 ---
 
 ## API keys

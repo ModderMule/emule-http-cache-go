@@ -8,6 +8,7 @@
 //	GET    /install            setup page, once installed only says so
 //	POST   /install            write the config and show the key once
 //	GET    /v1/info            server limits (no auth)
+//	GET    /v1/stats           storage and traffic figures (auth, or a local caller)
 //	POST   /v1/chunks          store a chunk (auth, unless open_upload)
 //	GET    /v1/chunks/{id}     fetch a chunk, Range-capable (no auth)
 //	HEAD   /v1/chunks/{id}     as GET, headers only (no auth)
@@ -31,6 +32,7 @@ import (
 
 	"github.com/ModderMule/emule-http-cache-go/internal/config"
 	"github.com/ModderMule/emule-http-cache-go/internal/install"
+	"github.com/ModderMule/emule-http-cache-go/internal/traffic"
 	"github.com/ModderMule/emule-http-cache-go/log"
 	"github.com/ModderMule/emule-http-cache-go/pkg/storage"
 
@@ -62,6 +64,11 @@ type Server struct {
 	startedAt time.Time
 	accessLog bool
 
+	// traffic outlives a reload, unlike everything in state: installing must
+	// not zero the counters. usage is the cached storage walk behind /v1/stats.
+	traffic *traffic.Recorder
+	usage   usageCache
+
 	// reload rebuilds the server's state after the install page writes a
 	// config. Supplied by the caller, which also owns the sweeper that has to
 	// be restarted alongside it.
@@ -87,6 +94,10 @@ type Deps struct {
 	// a config file. Optional: without it, an install needs a restart.
 	Reload func() (*config.Config, *storage.Store, *storage.Quota, error)
 
+	// Traffic is where requests are counted. Optional: the caller supplies one
+	// when something else, the expiry sweeper, has to count into it too.
+	Traffic *traffic.Recorder
+
 	// AccessLog enables the per-request log line.
 	AccessLog bool
 
@@ -102,12 +113,18 @@ func New(d Deps) (*Server, error) {
 		return nil, err
 	}
 
+	recorder := d.Traffic
+	if recorder == nil {
+		recorder = traffic.NewRecorder()
+	}
+
 	s := &Server{
 		installer: d.Installer,
 		pages:     pages,
 		logger:    d.Logger.WithFields(log.Fields{"module": "http_public"}),
 		startedAt: time.Now(),
 		accessLog: d.AccessLog,
+		traffic:   recorder,
 		reload:    d.Reload,
 		listen:    d.Config.Server.Addr,
 		timeouts:  d.Config.Server,
@@ -156,7 +173,7 @@ func (s *Server) Handler() http.Handler {
 	// lose the Allow header the contract specifies.
 	r.HandleMethodNotAllowed = true
 
-	r.Use(gin.RecoveryWithWriter(log.GetWriter()), s.requestLogger())
+	r.Use(gin.RecoveryWithWriter(log.GetWriter()), s.requestLogger(), s.trafficRecorder())
 
 	r.NoRoute(func(c *gin.Context) { writeNotFound(c) })
 	r.NoMethod(func(c *gin.Context) {
@@ -244,6 +261,9 @@ func (s *Server) registerRoutes(r *gin.Engine) {
 
 	r.GET(b+"/v1/info", s.handleInfo)
 	r.HEAD(b+"/v1/info", s.handleInfo)
+
+	r.GET(b+"/v1/stats", s.handleStats)
+	r.HEAD(b+"/v1/stats", s.handleStats)
 
 	r.POST(b+"/v1/chunks", s.handleUpload)
 

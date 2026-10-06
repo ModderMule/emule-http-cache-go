@@ -284,6 +284,54 @@ func (s *Store) RawExpiresAt(id string) (int64, bool) {
 	return meta.ExpiresAt, true
 }
 
+// Usage is what the store holds on disk.
+type Usage struct {
+	// Chunks and Bytes cover every chunk present, expired or not: an expired
+	// chunk occupies the volume until a sweep removes it.
+	Chunks int64
+	Bytes  int64
+
+	// ExpiredChunks and ExpiredBytes are the part of the above that the next
+	// sweep will reclaim.
+	ExpiredChunks int64
+	ExpiredBytes  int64
+}
+
+// Usage walks the store and reports how much it holds.
+//
+// It reads the disk every time and keeps no running count: the `gc` subcommand
+// and a PHP install sharing the directory both change it from outside this
+// process, so a counter would only be right until the first of them ran. The
+// cost is one stat and one sidecar read per chunk; a caller on a request path
+// should cache the answer.
+func (s *Store) Usage(now time.Time) Usage {
+	var usage Usage
+
+	for _, id := range s.AllIDs() {
+		// Sized from the blob, not from the sidecar, so this is the footprint
+		// rather than a claim about it. The sidecar is written before the blob
+		// is renamed into place, so one without the other is an ingest in
+		// flight and not yet a chunk.
+		info, err := os.Stat(s.BlobPath(id))
+		if err != nil {
+			continue
+		}
+
+		usage.Chunks++
+		usage.Bytes += info.Size()
+
+		// A sidecar that cannot be read counts as expired, because that is how
+		// Gc.Sweep treats it.
+		expiresAt, ok := s.RawExpiresAt(id)
+		if !ok || expiresAt <= now.Unix() {
+			usage.ExpiredChunks++
+			usage.ExpiredBytes += info.Size()
+		}
+	}
+
+	return usage
+}
+
 // -- internals ---------------------------------------------------------------
 
 // copyBody streams body into dst in 1 MiB slices, hashing as it goes, so peak

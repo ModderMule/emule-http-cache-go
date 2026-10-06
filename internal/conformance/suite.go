@@ -69,6 +69,7 @@ func (s *Suite) Run(r Reporter) Result {
 	r.Logf("base: %s", s.BaseURL)
 
 	s.checkInfo()
+	s.checkStats()
 	if !s.preparePayload() {
 		return s.result
 	}
@@ -118,6 +119,92 @@ func (s *Suite) checkInfo() {
 	s.assert(s.maxChunkSize >= cipherSize,
 		fmt.Sprintf("maxChunkSize %d fits a part", s.maxChunkSize),
 		fmt.Sprintf("%d < %d", s.maxChunkSize, cipherSize))
+}
+
+// checkStats covers GET /v1/stats, which is an extension rather than part of
+// the contract: a backend without it answers 404 and is none the worse.
+//
+// The figures themselves are not compared with anything. They are cached for a
+// few seconds and shared with whoever else is using the server, so the only
+// claims that hold from the outside are about their shape.
+func (s *Suite) checkStats() {
+	s.reporter.Section("GET /v1/stats (optional)")
+
+	header := http.Header{}
+	if s.APIKey != "" {
+		header.Set("Authorization", "Bearer "+s.APIKey)
+	}
+
+	resp, body, err := s.do("GET", s.BaseURL+"/v1/stats", nil, header)
+	if err != nil {
+		s.fail("answers", err.Error())
+		return
+	}
+
+	switch {
+	case resp.StatusCode == 404:
+		s.reporter.Skip("storage and traffic figures", "this backend does not implement the extension")
+		return
+	case resp.StatusCode == 401 && s.APIKey == "":
+		s.reporter.Skip("storage and traffic figures", "needs an API key, and none was given")
+		return
+	}
+
+	if !s.check("returns 200", resp.StatusCode, 200) {
+		return
+	}
+
+	type counter struct {
+		Total   *int64 `json:"total"`
+		Last24h *int64 `json:"last24h"`
+	}
+
+	var stats struct {
+		StartedAt int64 `json:"startedAt"`
+		Storage   struct {
+			Chunks        *int64 `json:"chunks"`
+			Bytes         *int64 `json:"bytes"`
+			ExpiredChunks *int64 `json:"expiredChunks"`
+			ExpiredBytes  *int64 `json:"expiredBytes"`
+		} `json:"storage"`
+		Traffic struct {
+			Uploads         counter `json:"uploads"`
+			UploadedBytes   counter `json:"uploadedBytes"`
+			Downloads       counter `json:"downloads"`
+			DownloadedBytes counter `json:"downloadedBytes"`
+			Deletes         counter `json:"deletes"`
+		} `json:"traffic"`
+		Clients counter `json:"clients"`
+	}
+	_ = json.Unmarshal(body, &stats)
+
+	storage := stats.Storage
+	if storage.Chunks == nil || storage.Bytes == nil || storage.ExpiredChunks == nil || storage.ExpiredBytes == nil {
+		s.fail("reports what the store holds", "a storage figure is missing: "+string(body))
+	} else {
+		s.assert(*storage.ExpiredChunks >= 0 && *storage.ExpiredChunks <= *storage.Chunks &&
+			*storage.ExpiredBytes >= 0 && *storage.ExpiredBytes <= *storage.Bytes,
+			"reports what the store holds",
+			"the expired share exceeds the total: "+string(body))
+	}
+
+	counters := []counter{
+		stats.Traffic.Uploads, stats.Traffic.UploadedBytes,
+		stats.Traffic.Downloads, stats.Traffic.DownloadedBytes,
+		stats.Traffic.Deletes, stats.Clients,
+	}
+	sane := true
+	for _, c := range counters {
+		if c.Total == nil || c.Last24h == nil || *c.Last24h < 0 || *c.Last24h > *c.Total {
+			sane = false
+		}
+	}
+	s.assert(sane, "every counter has a total and a last-24h figure within it",
+		"a counter is missing or its last24h exceeds its total: "+string(body))
+
+	s.assert(stats.StartedAt > 0 && stats.StartedAt <= time.Now().Unix(),
+		"startedAt is a unix timestamp in the past",
+		fmt.Sprintf("got %d, now is %d", stats.StartedAt, time.Now().Unix()))
 }
 
 func (s *Suite) preparePayload() bool {

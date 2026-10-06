@@ -68,7 +68,8 @@ header arrives intact without a rewrite rule. `docs/nginx.conf.sample` is now a
 reverse-proxy sample rather than a php-fpm one.
 
 **Nothing changed on the wire.** Same routes, same status codes, same error
-shape, same headers. The PHP conformance suite passes against this server
+shape, same headers. The one addition is `GET /v1/stats`, which the PHP server
+does not have and no client depends on (see the README). The PHP conformance suite passes against this server
 unmodified, which is the check to run if you doubt it:
 
 ```sh

@@ -3,6 +3,7 @@
 and never receives a key, a file hash or a part number.</p>
 <table>
   <tr><td><code>GET</code></td><td><a href="{{ .BaseURL }}/v1/info">{{ .BaseURL }}/v1/info</a></td></tr>
+  <tr><td><code>GET</code></td><td><code>{{ .BaseURL }}/v1/stats</code> &mdash; auth required, except from this host</td></tr>
   <tr><td><code>POST</code></td><td><code>{{ .BaseURL }}/v1/chunks</code></td></tr>
   <tr><td><code>GET</code></td><td><code>{{ .BaseURL }}/v1/chunks/{id}</code></td></tr>
   <tr><td><code>DELETE</code></td><td><code>{{ .BaseURL }}/v1/chunks/{id}</code> &mdash; auth required</td></tr>

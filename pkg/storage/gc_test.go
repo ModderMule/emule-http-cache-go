@@ -107,6 +107,61 @@ func TestSweepReapsStaleTempFiles(t *testing.T) {
 	}
 }
 
+// OnExpire feeds the "chunks expired" counter, so it must be told about chunks
+// only. Sweep's return value also counts the temp files it reaped.
+func TestSweepReportsExpiredChunksToTheHook(t *testing.T) {
+	cfg := testConfig(t)
+	store := NewStore(cfg)
+	gc := NewGc(cfg, store, NewQuota(cfg))
+
+	calls, reported := 0, 0
+	gc.OnExpire = func(chunks int) {
+		calls++
+		reported += chunks
+	}
+
+	for range 2 {
+		if _, err := store.Ingest(bytes.NewReader([]byte("dead")), "k", -time.Hour, 4); err != nil {
+			t.Fatalf("storing an expired chunk: %v", err)
+		}
+	}
+	if _, err := store.Ingest(bytes.NewReader([]byte("live")), "k", time.Hour, 4); err != nil {
+		t.Fatalf("storing a live chunk: %v", err)
+	}
+
+	shard := filepath.Join(cfg.Storage.DataDir, "ab")
+	if err := os.MkdirAll(shard, 0o775); err != nil {
+		t.Fatalf("creating a shard: %v", err)
+	}
+	stale := filepath.Join(shard, ".tmp-abcdef0123456789abcdef0123456789")
+	if err := os.WriteFile(stale, []byte("partial"), 0o664); err != nil {
+		t.Fatalf("staging a temp file: %v", err)
+	}
+	old := time.Now().Add(-2 * time.Hour)
+	if err := os.Chtimes(stale, old, old); err != nil {
+		t.Fatalf("ageing the temp file: %v", err)
+	}
+	t.Logf("input:  two expired chunks, one live chunk, one stale temp file")
+
+	reclaimed := gc.Sweep(10)
+	t.Logf("output: Sweep returned %d, the hook was told %d in %d call(s)", reclaimed, reported, calls)
+
+	if reclaimed != 3 {
+		t.Errorf("Sweep returned %d, want 3 (two chunks and the temp file)", reclaimed)
+	}
+	if reported != 2 {
+		t.Errorf("the hook was told %d chunk(s), want 2", reported)
+	}
+
+	// A sweep that finds nothing must stay quiet.
+	gc.Sweep(10)
+	t.Logf("output: after a second, empty sweep the hook has been called %d time(s)", calls)
+
+	if calls != 1 {
+		t.Errorf("the hook was called %d time(s), want 1", calls)
+	}
+}
+
 func TestRunStopsOnContextCancel(t *testing.T) {
 	cfg := testConfig(t)
 	cfg.GC.Interval = 10 * time.Millisecond
